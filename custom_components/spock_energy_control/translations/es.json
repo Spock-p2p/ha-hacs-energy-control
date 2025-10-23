@@ -1,0 +1,27 @@
+{
+  "title": "Spock Energy Control",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuración inicial",
+        "description": "Selecciona los dispositivos que se podrán apagar/encender según la señal remota.",
+        "data": {
+          "entities": "Dispositivos a controlar"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Solo se permite una instancia de Spock Energy Control."
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "title": "Editar dispositivos",
+        "data": {
+          "entities": "Dispositivos a controlar"
+        }
+      }
+    }
+  }
+}
