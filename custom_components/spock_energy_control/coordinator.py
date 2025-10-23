@@ -6,10 +6,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, ENDPOINT_URL, UPDATE_INTERVAL_SECONDS
+from .const import DOMAIN, ENDPOINT_URL, UPDATE_INTERVAL_SECONDS, CONF_API_TOKEN
 
 _LOGGER = logging.getLogger(__name__)
-
 
 class SpockEnergyCoordinator(DataUpdateCoordinator):
     """Coordinator que consulta el endpoint fijo y expone la acción."""
@@ -22,6 +21,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
         self._session = async_get_clientsession(hass)
+        self._token = config_entry.data.get(CONF_API_TOKEN)
 
     async def _async_update_data(self):
         try:
