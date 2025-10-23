@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 class SpockEnergyCoordinator(DataUpdateCoordinator):
     """Coordinator que consulta el endpoint fijo y expone la acción."""
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, api_token: str) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -27,7 +27,8 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
         try:
             # Reducimos timeout para no bloquear el loop
             async with async_timeout.timeout(10):
-                async with self._session.get(ENDPOINT_URL) as resp:
+                headers = {"X-Auth-Token": self.api_token}
+                async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
                     resp.raise_for_status()
                     data = await resp.json(content_type=None)
         except Exception as err:
