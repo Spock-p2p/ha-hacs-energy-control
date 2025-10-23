@@ -21,7 +21,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
         self._session = async_get_clientsession(hass)
-        self._token = config_entry.data.get(CONF_API_TOKEN)
+        self._api_token = api_token
 
     async def _async_update_data(self):
         try:
