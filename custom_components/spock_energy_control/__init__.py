@@ -32,13 +32,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Entidades configuradas: preferimos options (si existen) sobre data
     entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
 
+    api_token = entry.data.get("api_token")
+    
     # Estado inicial: activo
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         DATA_ACTIVE: True,
         DATA_ENTITIES: entities,
         DATA_UNSUB: None,
-        "coordinator": SpockEnergyCoordinator(hass),
+        "coordinator": SpockEnergyCoordinator(hass, api_token),
     }
 
     # Iniciar coordinator (primera lectura)
