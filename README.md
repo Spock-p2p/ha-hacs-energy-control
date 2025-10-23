@@ -1,6 +1,6 @@
 # Spock Energy Control
 
-![Logo](https://raw.githubusercontent.com/spockp2p/ha-hacs-energy-control/main/logo.png)
+![Logo](https://github.com/Spock-p2p/ha-hacs-energy-control/blob/main/logo.png)
 
 **Control inteligente de dispositivos que permite pausarlos automáticamente según una señal remota de precios o consumo.**
 
