@@ -16,6 +16,3 @@ DATA_UNSUB = "unsub"
 # Switch virtual
 SWITCH_UNIQUE_ID = "spock_energy_control_active"
 SWITCH_NAME = "Spock Energy Control Active"
-
-# Token header
-CONF_TOKEN_API = "token"
