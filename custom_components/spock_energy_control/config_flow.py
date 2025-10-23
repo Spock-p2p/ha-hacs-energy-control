@@ -5,7 +5,7 @@ import voluptuous as vol
 from homeassistant.helpers import entity_registry as er
 import homeassistant.helpers.config_validation as cv
 
-from .const import DOMAIN, CONF_ENTITIES
+from .const import DOMAIN, CONF_ENTITIES, CONF_API_TOKEN
 
 
 SUPPORTED_DOMAINS = ("switch", "light", "fan", "climate", "media_player")
@@ -31,6 +31,7 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
+                vol.Required(CONF_API_TOKEN): str,
                 vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(valid_entities),
             }
         )
