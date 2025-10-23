@@ -7,5 +7,5 @@
 - Dominio: `spock_energy_control`
 - Endpoint fijo (no configurable): `https://flex.spock.es/api/status`
 - La respuesta esperada es:
-  { "action": "stop" }  // apaga dispositivos seleccionados
-  { "action": "start" } // enciende dispositivos seleccionados
+-   { "action": "stop" }  // apaga dispositivos seleccionados
+-   {"action": "start" } // enciende dispositivos seleccionados
