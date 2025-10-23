@@ -11,6 +11,7 @@ from datetime import timedelta
 from .const import (
     DOMAIN,
     CONF_ENTITIES,
+    CONF_API_TOKEN,
     DATA_ACTIVE,
     DATA_ENTITIES,
     DATA_UNSUB,
@@ -32,20 +33,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Entidades configuradas: preferimos options (si existen) sobre data
     entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
 
-    api_token = entry.data.get("api_token")
-    
+    # Token API configurado por el usuario
+    api_token = entry.data.get(CONF_API_TOKEN)
+    if not api_token:
+        _LOGGER.error("No se ha configurado ningún API token. Cancela la instalación.")
+        return False
+
+    # Crear el coordinator con autenticación
+    coordinator = SpockEnergyCoordinator(hass, api_token)
+    await coordinator.async_config_entry_first_refresh()
+
     # Estado inicial: activo
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         DATA_ACTIVE: True,
         DATA_ENTITIES: entities,
         DATA_UNSUB: None,
-        "coordinator": SpockEnergyCoordinator(hass, api_token),
+        "coordinator": coordinator,
     }
-
-    # Iniciar coordinator (primera lectura)
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    await coordinator.async_config_entry_first_refresh()
 
     # Registrar plataformas (switch virtual)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -74,12 +79,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if action == "stop":
                 _LOGGER.info("Apagando entidades: %s", target_entities)
                 await hass.services.async_call(
-                    "homeassistant", "turn_off", {"entity_id": target_entities}, blocking=False
+                    "homeassistant",
+                    "turn_off",
+                    {"entity_id": target_entities},
+                    blocking=False,
                 )
             elif action == "start":
                 _LOGGER.info("Encendiendo entidades: %s", target_entities)
                 await hass.services.async_call(
-                    "homeassistant", "turn_on", {"entity_id": target_entities}, blocking=False
+                    "homeassistant",
+                    "turn_on",
+                    {"entity_id": target_entities},
+                    blocking=False,
                 )
 
         hass.async_create_task(_act())
