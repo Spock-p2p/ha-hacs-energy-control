@@ -7,8 +7,14 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, CONF_ENTITIES, CONF_API_TOKEN
 
-
-SUPPORTED_DOMAINS = ("switch", "light", "fan", "climate", "media_player")
+# Dominios admitidos con etiquetas de grupo
+SUPPORTED_DOMAINS = {
+    "switch": "Switches",
+    "light": "Luces",
+    "fan": "Ventiladores",
+    "climate": "Clima",
+    "media_player": "Media Players",
+}
 
 
 class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -23,16 +29,35 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         entity_registry = er.async_get(self.hass)
-        valid_entities: list[str] = []
+        grouped_entities: dict[str, str] = {}
+
+        # Recoger entidades y agrupar por dominio
+        grouped_by_domain: dict[str, list[tuple[str, str]]] = {
+            dom: [] for dom in SUPPORTED_DOMAINS.keys()
+        }
 
         for ent in entity_registry.entities.values():
-            if ent.domain in SUPPORTED_DOMAINS:
-                valid_entities.append(ent.entity_id)
+            if ent.domain in SUPPORTED_DOMAINS.keys():
+                state = self.hass.states.get(ent.entity_id)
+                friendly_name = (
+                    state.attributes.get("friendly_name")
+                    if state and "friendly_name" in state.attributes
+                    else ent.entity_id
+                )
+                grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+
+        # Ordenar por dominio y luego por nombre
+        for domain, entries in grouped_by_domain.items():
+            if not entries:
+                continue
+            label_header = SUPPORTED_DOMAINS[domain]
+            for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
+                grouped_entities[entity_id] = f"{label_header} › {name}"
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_API_TOKEN): str,
-                vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(valid_entities),
+                vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(grouped_entities),
             }
         )
 
@@ -58,10 +83,28 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         entity_registry = er.async_get(self.hass)
-        valid_entities: list[str] = []
+        grouped_entities: dict[str, str] = {}
+        grouped_by_domain: dict[str, list[tuple[str, str]]] = {
+            dom: [] for dom in SUPPORTED_DOMAINS.keys()
+        }
+
         for ent in entity_registry.entities.values():
-            if ent.domain in SUPPORTED_DOMAINS:
-                valid_entities.append(ent.entity_id)
+            if ent.domain in SUPPORTED_DOMAINS.keys():
+                state = self.hass.states.get(ent.entity_id)
+                friendly_name = (
+                    state.attributes.get("friendly_name")
+                    if state and "friendly_name" in state.attributes
+                    else ent.entity_id
+                )
+                grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+
+        # Ordenar y agrupar igual que en el flujo inicial
+        for domain, entries in grouped_by_domain.items():
+            if not entries:
+                continue
+            label_header = SUPPORTED_DOMAINS[domain]
+            for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
+                grouped_entities[entity_id] = f"{label_header} › {name}"
 
         current = self.config_entry.options.get(
             CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, [])
@@ -70,7 +113,7 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(CONF_ENTITIES, default=current): cv.multi_select(
-                    valid_entities
+                    grouped_entities
                 ),
             }
         )
