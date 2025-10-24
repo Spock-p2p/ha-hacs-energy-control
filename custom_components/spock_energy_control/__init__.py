@@ -66,30 +66,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("No hay entidades seleccionadas.")
             return
 
+        async def _safe_call(domain, service, entity_ids):
+            """Llamar al servicio en el hilo principal de forma segura."""
+            await hass.async_add_executor_job(
+                lambda: hass.loop.call_soon_threadsafe(
+                    lambda: hass.async_create_task(
+                        hass.services.async_call(
+                            domain,
+                            service,
+                            {"entity_id": entity_ids},
+                            blocking=False,
+                        )
+                    )
+                )
+            )
+
+        # Ejecutar acción
         if action == "stop":
             _LOGGER.info("Apagando entidades: %s", target_entities)
-            await hass.services.async_call(
-                "homeassistant",
-                "turn_off",
-                {"entity_id": target_entities},
-                blocking=False,
-            )
+            await _safe_call("homeassistant", "turn_off", target_entities)
         elif action == "start":
             _LOGGER.info("Encendiendo entidades: %s", target_entities)
-            await hass.services.async_call(
-                "homeassistant",
-                "turn_on",
-                {"entity_id": target_entities},
-                blocking=False,
-            )
+            await _safe_call("homeassistant", "turn_on", target_entities)
 
     def _safe_tick(now):
         """Ejecutar el tick dentro del hilo principal, compatible con futuras versiones."""
         try:
-            # Home Assistant 2025.4+ (nuevo método)
             hass.async_create_background_task(_tick(now), "spock_energy_control_tick")
         except AttributeError:
-            # Compatibilidad con versiones anteriores
             hass.loop.call_soon_threadsafe(hass.async_create_task, _tick(now))
 
     unsub = async_track_time_interval(
