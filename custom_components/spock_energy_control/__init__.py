@@ -30,20 +30,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurar integración desde la UI."""
-    # Entidades configuradas: preferimos options (si existen) sobre data
     entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
 
-    # Token API configurado por el usuario
     api_token = entry.data.get(CONF_API_TOKEN)
     if not api_token:
         _LOGGER.error("No se ha configurado ningún API token. Cancela la instalación.")
         return False
 
-    # Crear el coordinator con autenticación
     coordinator = SpockEnergyCoordinator(hass, api_token)
     await coordinator.async_config_entry_first_refresh()
 
-    # Estado inicial: activo
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         DATA_ACTIVE: True,
@@ -52,14 +48,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
     }
 
-    # Registrar plataformas (switch virtual)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Función asíncrona segura para el ciclo de comprobación
+    # --- ciclo de comprobación seguro ---
     async def _tick(now):
         cfg = hass.data[DOMAIN][entry.entry_id]
         if not cfg[DATA_ACTIVE]:
-            # Pausado: no consumimos red
             return
 
         coordinator = cfg["coordinator"]
@@ -73,33 +67,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("No hay entidades seleccionadas.")
             return
 
-        # Ejecutar acción
         if action == "stop":
             _LOGGER.info("Apagando entidades: %s", target_entities)
             await hass.services.async_call(
-                "homeassistant",
-                "turn_off",
-                {"entity_id": target_entities},
-                blocking=False,
+                "homeassistant", "turn_off", {"entity_id": target_entities}, blocking=False
             )
         elif action == "start":
             _LOGGER.info("Encendiendo entidades: %s", target_entities)
             await hass.services.async_call(
-                "homeassistant",
-                "turn_on",
-                {"entity_id": target_entities},
-                blocking=False,
+                "homeassistant", "turn_on", {"entity_id": target_entities}, blocking=False
             )
 
-    # Programar el ciclo de comprobación en intervalos (async-safe)
+    # 👇 ESTA es la parte cambiada (ya no usamos hass.async_create_task directamente)
+    def _schedule_tick(now):
+        """Reprogramar el tick de forma thread-safe."""
+        hass.loop.call_soon_threadsafe(hass.async_add_job, _tick(now))
+
     unsub = async_track_time_interval(
-        hass,
-        lambda now: hass.async_create_task(_tick(now)),
-        timedelta(seconds=UPDATE_INTERVAL_SECONDS),
+        hass, _schedule_tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
     )
     hass.data[DOMAIN][entry.entry_id][DATA_UNSUB] = unsub
 
-    # Escuchar cambios en opciones para recargar entidades al vuelo
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     _LOGGER.info(
@@ -111,7 +99,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Actualizar lista de entidades si cambian las opciones desde la UI."""
     cfg = hass.data[DOMAIN][entry.entry_id]
     new_entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
     cfg[DATA_ENTITIES] = new_entities
@@ -119,11 +106,8 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Desinstalar integración."""
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
     cfg = hass.data[DOMAIN].pop(entry.entry_id, None)
     if cfg and cfg.get(DATA_UNSUB):
         cfg[DATA_UNSUB]()  # cancelar intervalo
-
     return ok
