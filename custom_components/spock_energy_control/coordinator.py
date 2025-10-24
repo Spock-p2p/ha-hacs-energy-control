@@ -1,7 +1,7 @@
 import logging
 from datetime import timedelta
-import asyncio
 import async_timeout
+import asyncio
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -24,24 +24,13 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
         )
         self.hass = hass
         self._session = async_get_clientsession(hass)
-        self.api_token = api_token  # mantenerlo simple y consistente
+        self.api_token = api_token
 
     async def _async_update_data(self):
-        """Consultar el endpoint remoto con autenticación (seguro en cualquier hilo)."""
+        """Consultar el endpoint remoto con autenticación, seguro para cualquier hilo."""
         try:
-            # Garantizar que estamos dentro de un event loop activo
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            async with async_timeout.timeout(10):
-                headers = {"X-Auth-Token": self.api_token}
-                async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json(content_type=None)
-
+            # Ejecutar la llamada HTTP dentro del event loop principal de Home Assistant
+            data = await self.hass.async_add_executor_job(self._fetch_data)
         except Exception as err:
             raise UpdateFailed(f"HTTP error: {err}") from err
 
@@ -52,3 +41,15 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("Acción recibida: %s", action)
         return {"action": action}
+
+    def _fetch_data(self):
+        """Función síncrona que realiza la llamada HTTP, ejecutada dentro del loop principal."""
+        import requests  # uso seguro dentro de executor
+        headers = {"X-Auth-Token": self.api_token}
+        try:
+            resp = requests.get(ENDPOINT_URL, headers=headers, timeout=10)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as err:
+            _LOGGER.error("Error HTTP en SpockEnergyCoordinator: %s", err)
+            raise err
