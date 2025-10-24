@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from homeassistant import config_entries
 import voluptuous as vol
-from homeassistant.helpers import entity_registry as er, device_registry as dr
+from homeassistant.helpers import (
+    entity_registry as er,
+    device_registry as dr,
+    area_registry as ar,
+)
 import homeassistant.helpers.config_validation as cv
 import re
 
@@ -16,9 +20,8 @@ SUPPORTED_DOMAINS = {
     "media_player": "Media Players",
 }
 
-# Expresiones de nombres irrelevantes que queremos filtrar (p.ej. sensores internos)
 IGNORE_PATTERNS = re.compile(
-    r"(tamper|motion|wdr|watermark|pre_release|get_hacs|glimmer|video|tracking)",
+    r"(tamper|motion|watermark|get_hacs|pre_release|debug|video|tracking)",
     re.IGNORECASE,
 )
 
@@ -33,23 +36,29 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         entity_registry = er.async_get(self.hass)
         device_registry = dr.async_get(self.hass)
+        area_registry = ar.async_get(self.hass)
 
         grouped_entities: dict[str, str] = {}
         grouped_by_domain: dict[str, list[tuple[str, str]]] = {dom: [] for dom in SUPPORTED_DOMAINS}
 
+        # --- Recorrer entidades ---
         for ent in entity_registry.entities.values():
             if ent.domain not in SUPPORTED_DOMAINS:
                 continue
-
-            # Saltar nombres irrelevantes
             if IGNORE_PATTERNS.search(ent.entity_id):
                 continue
 
             device_name = None
+            area_name = None
+
             if ent.device_id:
                 device = device_registry.async_get(ent.device_id)
                 if device:
                     device_name = device.name_by_user or device.name
+                    if device.area_id:
+                        area = area_registry.async_get(device.area_id)
+                        if area:
+                            area_name = area.name
 
             friendly_name = (
                 device_name
@@ -63,23 +72,44 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     friendly_name = state.attributes.get("friendly_name")
 
             if not friendly_name:
-                # Crear un nombre legible a partir del entity_id
                 clean_name = ent.entity_id.split(".")[-1].replace("_", " ").title()
                 friendly_name = clean_name
 
-            grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+            domain_label = SUPPORTED_DOMAINS.get(ent.domain, ent.domain.capitalize())
+            parts = [domain_label, friendly_name]
+            if area_name:
+                parts.append(area_name)
+            display_name = " - ".join(parts)
 
+            grouped_by_domain[ent.domain].append((ent.entity_id, display_name))
+
+        # --- Añadir encabezados visuales ---
+        ordered_list: list[tuple[str, str]] = []
         for domain, entries in grouped_by_domain.items():
             if not entries:
                 continue
             label = SUPPORTED_DOMAINS[domain]
+            # Encabezado visual
+            ordered_list.append((f"header_{domain}", f"──── {label} ────"))
+            # Entidades ordenadas
             for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                grouped_entities[entity_id] = f"{name} ({label})"
+                ordered_list.append((entity_id, name))
+
+        # Convertir a dict para el schema
+        grouped_entities = {k: v for k, v in ordered_list if not k.startswith("header_")}
+
+        # Multi-select no permite headers, así que los insertamos visualmente con caracteres
+        visual_entities = {}
+        for key, label in ordered_list:
+            if key.startswith("header_"):
+                visual_entities[f"__{key}__"] = label
+            else:
+                visual_entities[key] = f"   {label}"
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_API_TOKEN): str,
-                vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(grouped_entities),
+                vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(visual_entities),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
@@ -104,6 +134,7 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
         entity_registry = er.async_get(self.hass)
         device_registry = dr.async_get(self.hass)
+        area_registry = ar.async_get(self.hass)
 
         grouped_entities: dict[str, str] = {}
         grouped_by_domain: dict[str, list[tuple[str, str]]] = {dom: [] for dom in SUPPORTED_DOMAINS}
@@ -111,15 +142,20 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
         for ent in entity_registry.entities.values():
             if ent.domain not in SUPPORTED_DOMAINS:
                 continue
-
             if IGNORE_PATTERNS.search(ent.entity_id):
                 continue
 
             device_name = None
+            area_name = None
+
             if ent.device_id:
                 device = device_registry.async_get(ent.device_id)
                 if device:
                     device_name = device.name_by_user or device.name
+                    if device.area_id:
+                        area = area_registry.async_get(device.area_id)
+                        if area:
+                            area_name = area.name
 
             friendly_name = (
                 device_name
@@ -136,14 +172,29 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
                 clean_name = ent.entity_id.split(".")[-1].replace("_", " ").title()
                 friendly_name = clean_name
 
-            grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+            domain_label = SUPPORTED_DOMAINS.get(ent.domain, ent.domain.capitalize())
+            parts = [domain_label, friendly_name]
+            if area_name:
+                parts.append(area_name)
+            display_name = " - ".join(parts)
 
+            grouped_by_domain[ent.domain].append((ent.entity_id, display_name))
+
+        ordered_list: list[tuple[str, str]] = []
         for domain, entries in grouped_by_domain.items():
             if not entries:
                 continue
             label = SUPPORTED_DOMAINS[domain]
+            ordered_list.append((f"header_{domain}", f"──── {label} ────"))
             for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                grouped_entities[entity_id] = f"{name} ({label})"
+                ordered_list.append((entity_id, name))
+
+        visual_entities = {}
+        for key, label in ordered_list:
+            if key.startswith("header_"):
+                visual_entities[f"__{key}__"] = label
+            else:
+                visual_entities[key] = f"   {label}"
 
         current = self.config_entry.options.get(
             CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, [])
@@ -151,7 +202,7 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_ENTITIES, default=current): cv.multi_select(grouped_entities),
+                vol.Required(CONF_ENTITIES, default=current): cv.multi_select(visual_entities),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema)
