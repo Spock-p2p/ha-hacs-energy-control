@@ -1,12 +1,12 @@
 import logging
 from typing import Any
+from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.const import Platform
-from datetime import timedelta
 
 from .const import (
     DOMAIN,
@@ -31,7 +31,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurar integración desde la UI."""
     entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
-
     api_token = entry.data.get(CONF_API_TOKEN)
     if not api_token:
         _LOGGER.error("No se ha configurado ningún API token. Cancela la instalación.")
@@ -50,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # --- ciclo de comprobación seguro ---
+    # --- Ciclo de comprobación (ahora thread-safe) ---
     async def _tick(now):
         cfg = hass.data[DOMAIN][entry.entry_id]
         if not cfg[DATA_ACTIVE]:
@@ -78,13 +77,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "homeassistant", "turn_on", {"entity_id": target_entities}, blocking=False
             )
 
-    # 👇 ESTA es la parte cambiada (ya no usamos hass.async_create_task directamente)
-    def _schedule_tick(now):
-        """Reprogramar el tick de forma thread-safe."""
-        hass.loop.call_soon_threadsafe(hass.async_add_job, _tick(now))
+    def _safe_tick(now):
+        """Ejecuta el tick dentro del loop principal de forma segura."""
+        hass.loop.call_soon_threadsafe(
+            lambda: hass.async_add_job(_tick, now)
+        )
 
     unsub = async_track_time_interval(
-        hass, _schedule_tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
+        hass, _safe_tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
     )
     hass.data[DOMAIN][entry.entry_id][DATA_UNSUB] = unsub
 
