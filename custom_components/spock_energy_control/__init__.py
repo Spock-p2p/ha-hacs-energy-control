@@ -1,128 +1,161 @@
+"""The Energy Control integration."""
+from __future__ import annotations
+
 import logging
-from typing import Any
 from datetime import timedelta
+import json
 
-from homeassistant.core import HomeAssistant
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers.typing import ConfigType
 from homeassistant.const import Platform
-
-from .const import (
-    DOMAIN,
-    CONF_ENTITIES,
-    CONF_API_TOKEN,
-    DATA_ACTIVE,
-    DATA_ENTITIES,
-    DATA_UNSUB,
-    UPDATE_INTERVAL_SECONDS,
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    UpdateFailed,
 )
-from .coordinator import SpockEnergyCoordinator
+
+# Importa las constantes del componente
+from .const import DOMAIN 
+
+# Importa las constantes de configuración definidas en config_flow.py
+from .config_flow import (
+    CONF_API_URL, 
+    CONF_SCAN_INTERVAL, 
+    CONF_GREEN_DEVICES, 
+    CONF_YELLOW_DEVICES
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SWITCH]
-
-
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    return True
+# La plataforma principal del componente, si es necesario, si no, puedes eliminar.
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Configurar integración desde la UI."""
-    entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
-    api_token = entry.data.get(CONF_API_TOKEN)
-    if not api_token:
-        _LOGGER.error("No se ha configurado ningún API token. Cancela la instalación.")
-        return False
+    """Set up Energy Control from a config entry."""
 
-    coordinator = SpockEnergyCoordinator(hass, api_token)
+    # 1. Inicializar el coordinador y pasar la configuración
+    coordinator = EnergyControlCoordinator(hass, entry.data)
+    
+    # 2. Guardar las listas de dispositivos en el coordinador
+    coordinator.green_devices = entry.data.get(CONF_GREEN_DEVICES, [])
+    coordinator.yellow_devices = entry.data.get(CONF_YELLOW_DEVICES, [])
+
+    # 3. Solicitar la primera actualización
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        DATA_ACTIVE: True,
-        DATA_ENTITIES: entities,
-        DATA_UNSUB: None,
-        "coordinator": coordinator,
-    }
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
+    # 4. Establecer las plataformas (ej. sensor)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # --- Ciclo de comprobación (thread-safe) ---
-    async def _tick(now):
-        cfg = hass.data[DOMAIN][entry.entry_id]
-        if not cfg[DATA_ACTIVE]:
-            return
-
-        coordinator = cfg["coordinator"]
-        await coordinator.async_request_refresh()
-        action = (coordinator.data or {}).get("action")
-        if not action:
-            return
-
-        target_entities = cfg[DATA_ENTITIES]
-        if not target_entities:
-            _LOGGER.debug("No hay entidades seleccionadas.")
-            return
-
-        async def _safe_call(domain, service, entity_ids):
-            """Llamar al servicio en el hilo principal de forma segura."""
-            await hass.async_add_executor_job(
-                lambda: hass.loop.call_soon_threadsafe(
-                    lambda: hass.async_create_task(
-                        hass.services.async_call(
-                            domain,
-                            service,
-                            {"entity_id": entity_ids},
-                            blocking=False,
-                        )
-                    )
-                )
-            )
-
-        # Ejecutar acción
-        if action == "stop":
-            _LOGGER.info("Apagando entidades: %s", target_entities)
-            await _safe_call("homeassistant", "turn_off", target_entities)
-        elif action == "start":
-            _LOGGER.info("Encendiendo entidades: %s", target_entities)
-            await _safe_call("homeassistant", "turn_on", target_entities)
-
-    def _safe_tick(now):
-        """Ejecutar el tick dentro del hilo principal, compatible con futuras versiones."""
-        try:
-            hass.async_create_background_task(_tick(now), "spock_energy_control_tick")
-        except AttributeError:
-            hass.loop.call_soon_threadsafe(hass.async_create_task, _tick(now))
-
-    unsub = async_track_time_interval(
-        hass, _safe_tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
-    )
-    hass.data[DOMAIN][entry.entry_id][DATA_UNSUB] = unsub
-
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-
-    _LOGGER.info(
-        "Spock Energy Control listo. Entidades: %s. Intervalo: %ss",
-        entities,
-        UPDATE_INTERVAL_SECONDS,
-    )
     return True
 
 
-async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Actualizar lista de entidades si cambian las opciones desde la UI."""
-    cfg = hass.data[DOMAIN][entry.entry_id]
-    new_entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
-    cfg[DATA_ENTITIES] = new_entities
-    _LOGGER.info("Actualizadas entidades seleccionadas: %s", new_entities)
-
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Desinstalar integración."""
-    ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    cfg = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if cfg and cfg.get(DATA_UNSUB):
-        cfg[DATA_UNSUB]()  # cancelar intervalo
-    return ok
+    """Unload a config entry."""
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+    return unload_ok
+
+
+class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
+    """My custom coordinator."""
+
+    def __init__(self, hass: HomeAssistant, config: dict):
+        """Initialize my coordinator."""
+        self.config = config
+        self.api_url = config[CONF_API_URL]
+        
+        # Inicialización de listas de dispositivos para ser llenadas en async_setup_entry
+        self.green_devices: list[str] = []
+        self.yellow_devices: list[str] = []
+
+        update_interval = timedelta(seconds=config[CONF_SCAN_INTERVAL])
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=update_interval,
+        )
+
+    async def _async_update_data(self) -> dict[str, str]:
+        """Fetch data from API endpoint and execute SGReady actions."""
+        try:
+            # 1. Realizar la llamada a la API
+            async with aiohttp.ClientSession() as session:
+                # Asegurarse de usar un protocolo si no está en la configuración (ej. http://)
+                full_url = self.api_url if "://" in self.api_url else f"http://{self.api_url}"
+                
+                # Ejemplo de URL: http://flex.spock.es/api/status
+                async with session.get(full_url) as response:
+                    if response.status != 200:
+                        raise UpdateFailed(f"API returned status {response.status}")
+                    
+                    data = await response.json()
+                    
+                    # Verificar el formato de la respuesta (ej. {"green": "start", "yellow": "stop"})
+                    if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
+                         _LOGGER.error("API response format is incorrect: %s", data)
+                         raise UpdateFailed("API response format is incorrect.")
+
+            # 2. Procesa la respuesta y ejecuta acciones SGReady
+            await self._execute_sgready_actions(data)
+            
+            return data
+            
+        except aiohttp.ClientError as err:
+            raise UpdateFailed(f"Error communicating with API: {err}")
+        except Exception as err:
+            raise UpdateFailed(f"An unexpected error occurred: {err}")
+
+    async def _execute_sgready_actions(self, status_data: dict):
+        """Ejecuta las acciones de encendido/apagado basadas en la respuesta SGReady."""
+        
+        _LOGGER.debug("SGReady status received: %s", status_data)
+        
+        # Mapeo de los tipos SGReady a las listas de dispositivos
+        device_groups = {
+            "green": self.green_devices,
+            "yellow": self.yellow_devices,
+        }
+        
+        # Iterar sobre los tipos (green, yellow) en la respuesta
+        for device_type, state in status_data.items():
+            devices_to_control = device_groups.get(device_type)
+            
+            # Solo si la lista de dispositivos está configurada Y no está vacía
+            if not devices_to_control:
+                continue
+            
+            # Determinar el servicio a llamar
+            service = None
+            if state == "start":
+                service = "turn_on"
+            elif state == "stop":
+                service = "turn_off"
+            
+            if service:
+                _LOGGER.info(
+                    "Executing SGReady action: %s for %s devices: %s", 
+                    service, 
+                    device_type, 
+                    devices_to_control
+                )
+                
+                # 3. Llamar al servicio de Home Assistant para el grupo de dispositivos
+                await self.hass.services.async_call(
+                    "homeassistant",
+                    service,  # "turn_on" o "turn_off"
+                    {"entity_id": devices_to_control}, # La clave entity_id acepta una lista
+                    blocking=False,
+                )
+            else:
+                _LOGGER.warning(
+                    "Unknown state for %s devices: %s (Expected 'start' or 'stop')", 
+                    device_type, 
+                    state
+                )
