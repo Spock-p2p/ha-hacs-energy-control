@@ -78,10 +78,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
     def _safe_tick(now):
-        """Ejecuta el tick dentro del loop principal de forma segura."""
-        hass.loop.call_soon_threadsafe(
-            lambda: hass.async_add_job(_tick, now)
-        )
+    """Ejecutar el tick dentro del hilo principal, compatible con futuras versiones."""
+    try:
+        hass.async_create_background_task(_tick(now), "spock_energy_control_tick")
+    except AttributeError:
+        hass.loop.call_soon_threadsafe(hass.async_create_task, _tick(now))
 
     unsub = async_track_time_interval(
         hass, _safe_tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
