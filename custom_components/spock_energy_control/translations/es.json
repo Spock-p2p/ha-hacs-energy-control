@@ -1,27 +1,22 @@
 {
-  "title": "Spock Energy Control",
   "config": {
     "step": {
       "user": {
-        "title": "Configuración inicial",
-        "description": "Selecciona los dispositivos que se podrán apagar/encender según la señal remota.",
         "data": {
-          "entities": "Dispositivos a controlar"
-        }
+          "api_url": "URL de la API (ej: flex.spock.es/api/status)",
+          "scan_interval": "Intervalo de escaneo (segundos)",
+          "green_devices": "Dispositivos Verdes (Prioridad 1)",
+          "yellow_devices": "Dispositivos Amarillos (Prioridad 2)"
+        },
+        "description": "Configura la URL de la API, el intervalo de escaneo y los dispositivos para los grupos SGReady Verde y Amarillo. Los dispositivos no pueden estar en ambos grupos.",
+        "title": "Configuración de Control de Energía"
       }
     },
+    "error": {
+      "exclusive_devices": "Los dispositivos no pueden ser seleccionados tanto en la lista Verde como en la Amarilla. Por favor, asegúrate de que ninguna entidad esté duplicada."
+    },
     "abort": {
-      "single_instance_allowed": "Solo se permite una instancia de Spock Energy Control."
-    }
-  },
-  "options": {
-    "step": {
-      "user": {
-        "title": "Editar dispositivos",
-        "data": {
-          "entities": "Dispositivos a controlar"
-        }
-      }
+      "already_configured": "La integración ya está configurada."
     }
   }
 }
