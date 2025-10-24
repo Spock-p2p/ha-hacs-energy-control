@@ -1,17 +1,23 @@
+"""Config flow for Energy Control integration."""
 from __future__ import annotations
 
-from homeassistant import config_entries
+import logging
+from typing import Any
+
 import voluptuous as vol
-from homeassistant.helpers import (
-    entity_registry as er,
-    device_registry as dr,
-    area_registry as ar,
-)
-import homeassistant.helpers.config_validation as cv
-import re
 
-from .const import DOMAIN, CONF_ENTITIES, CONF_API_TOKEN
+from homeassistant import config_entries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import selector
 
+# Ajusta el DOMAIN según tu manifest.json
+from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+# Dominios Soportados (como en tu configuración original)
 SUPPORTED_DOMAINS = {
     "switch": "Switches",
     "light": "Luces",
@@ -20,189 +26,73 @@ SUPPORTED_DOMAINS = {
     "media_player": "Media Players",
 }
 
-IGNORE_PATTERNS = re.compile(
-    r"(tamper|motion|watermark|get_hacs|pre_release|debug|video|tracking)",
-    re.IGNORECASE,
+# Generar la lista de opciones para los selectores de entidades
+ENTITY_SELECTOR_OPTIONS = [
+    selector.EntityFilterSelectorConfig(domain=domain) 
+    for domain in SUPPORTED_DOMAINS
+]
+
+
+# Nuevas constantes para la configuración
+CONF_API_URL = "api_url"
+CONF_SCAN_INTERVAL = "scan_interval"
+CONF_GREEN_DEVICES = "green_devices"
+CONF_YELLOW_DEVICES = "yellow_devices"
+
+# Esquema base para el formulario de configuración
+DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_API_URL): str,
+        vol.Required(CONF_SCAN_INTERVAL, default=60): vol.All(vol.Coerce(int), vol.Range(min=10)),
+        
+        # Selector para Green Devices (SGReady) - Usa todos los dominios
+        vol.Required(CONF_GREEN_DEVICES, default=[]): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=ENTITY_SELECTOR_OPTIONS,
+                multiple=True,
+                translation_key=CONF_GREEN_DEVICES,
+            )
+        ),
+        
+        # Selector para Yellow Devices (SGReady) - Usa todos los dominios
+        vol.Required(CONF_YELLOW_DEVICES, default=[]): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=ENTITY_SELECTOR_OPTIONS,
+                multiple=True,
+                translation_key=CONF_YELLOW_DEVICES,
+            )
+        ),
+    }
 )
 
 
-class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Energy Control."""
+
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
-        """Flujo de configuración inicial."""
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the initial step."""
+        errors: dict[str, str] = {}
+        
         if user_input is not None:
-            return self.async_create_entry(title="Spock Energy Control", data=user_input)
-
-        entity_registry = er.async_get(self.hass)
-        device_registry = dr.async_get(self.hass)
-        area_registry = ar.async_get(self.hass)
-
-        grouped_entities: dict[str, str] = {}
-        grouped_by_domain: dict[str, list[tuple[str, str]]] = {dom: [] for dom in SUPPORTED_DOMAINS}
-
-        # --- Recorrer entidades ---
-        for ent in entity_registry.entities.values():
-            if ent.domain not in SUPPORTED_DOMAINS:
-                continue
-            if IGNORE_PATTERNS.search(ent.entity_id):
-                continue
-
-            device_name = None
-            area_name = None
-
-            if ent.device_id:
-                device = device_registry.async_get(ent.device_id)
-                if device:
-                    device_name = device.name_by_user or device.name
-                    if device.area_id:
-                        area = area_registry.async_get(device.area_id)
-                        if area:
-                            area_name = area.name
-
-            friendly_name = (
-                device_name
-                or getattr(ent, "original_name", None)
-                or getattr(ent, "name", None)
-            )
-
-            if not friendly_name:
-                state = self.hass.states.get(ent.entity_id)
-                if state and isinstance(state.attributes, dict):
-                    friendly_name = state.attributes.get("friendly_name")
-
-            if not friendly_name:
-                clean_name = ent.entity_id.split(".")[-1].replace("_", " ").title()
-                friendly_name = clean_name
-
-            domain_label = SUPPORTED_DOMAINS.get(ent.domain, ent.domain.capitalize())
-            parts = [domain_label, friendly_name]
-            if area_name:
-                parts.append(area_name)
-            display_name = " - ".join(parts)
-
-            grouped_by_domain[ent.domain].append((ent.entity_id, display_name))
-
-        # --- Añadir encabezados visuales ---
-        ordered_list: list[tuple[str, str]] = []
-        for domain, entries in grouped_by_domain.items():
-            if not entries:
-                continue
-            label = SUPPORTED_DOMAINS[domain]
-            # Encabezado visual
-            ordered_list.append((f"header_{domain}", f"──── {label} ────"))
-            # Entidades ordenadas
-            for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                ordered_list.append((entity_id, name))
-
-        # Convertir a dict para el schema
-        grouped_entities = {k: v for k, v in ordered_list if not k.startswith("header_")}
-
-        # Multi-select no permite headers, así que los insertamos visualmente con caracteres
-        visual_entities = {}
-        for key, label in ordered_list:
-            if key.startswith("header_"):
-                visual_entities[f"__{key}__"] = label
+            # 1. Validación de la exclusividad
+            green_devices = set(user_input.get(CONF_GREEN_DEVICES, []))
+            yellow_devices = set(user_input.get(CONF_YELLOW_DEVICES, []))
+            
+            # Comprobar si hay entidades seleccionadas en ambas listas
+            if green_devices.intersection(yellow_devices):
+                # Usaremos la clave de error 'exclusive_devices'
+                errors["base"] = "exclusive_devices" 
             else:
-                visual_entities[key] = f"   {label}"
+                # 2. Si es válido, crear la entrada de configuración
+                return self.async_create_entry(title="Energy Control", data=user_input)
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_API_TOKEN): str,
-                vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(visual_entities),
-            }
+        # 3. Mostrar el formulario
+        return self.async_show_form(
+            step_id="user", 
+            data_schema=DATA_SCHEMA, 
+            errors=errors
         )
-        return self.async_show_form(step_id="user", data_schema=schema)
-
-    @staticmethod
-    def async_get_options_flow(config_entry):
-        return SpockEnergyControlOptionsFlow(config_entry)
-
-
-class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
-    """Permite editar entidades después de instalar la integración."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry):
-        self.config_entry = config_entry
-
-    async def async_step_init(self, user_input=None):
-        return await self.async_step_user(user_input)
-
-    async def async_step_user(self, user_input=None):
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        entity_registry = er.async_get(self.hass)
-        device_registry = dr.async_get(self.hass)
-        area_registry = ar.async_get(self.hass)
-
-        grouped_entities: dict[str, str] = {}
-        grouped_by_domain: dict[str, list[tuple[str, str]]] = {dom: [] for dom in SUPPORTED_DOMAINS}
-
-        for ent in entity_registry.entities.values():
-            if ent.domain not in SUPPORTED_DOMAINS:
-                continue
-            if IGNORE_PATTERNS.search(ent.entity_id):
-                continue
-
-            device_name = None
-            area_name = None
-
-            if ent.device_id:
-                device = device_registry.async_get(ent.device_id)
-                if device:
-                    device_name = device.name_by_user or device.name
-                    if device.area_id:
-                        area = area_registry.async_get(device.area_id)
-                        if area:
-                            area_name = area.name
-
-            friendly_name = (
-                device_name
-                or getattr(ent, "original_name", None)
-                or getattr(ent, "name", None)
-            )
-
-            if not friendly_name:
-                state = self.hass.states.get(ent.entity_id)
-                if state and isinstance(state.attributes, dict):
-                    friendly_name = state.attributes.get("friendly_name")
-
-            if not friendly_name:
-                clean_name = ent.entity_id.split(".")[-1].replace("_", " ").title()
-                friendly_name = clean_name
-
-            domain_label = SUPPORTED_DOMAINS.get(ent.domain, ent.domain.capitalize())
-            parts = [domain_label, friendly_name]
-            if area_name:
-                parts.append(area_name)
-            display_name = " - ".join(parts)
-
-            grouped_by_domain[ent.domain].append((ent.entity_id, display_name))
-
-        ordered_list: list[tuple[str, str]] = []
-        for domain, entries in grouped_by_domain.items():
-            if not entries:
-                continue
-            label = SUPPORTED_DOMAINS[domain]
-            ordered_list.append((f"header_{domain}", f"──── {label} ────"))
-            for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                ordered_list.append((entity_id, name))
-
-        visual_entities = {}
-        for key, label in ordered_list:
-            if key.startswith("header_"):
-                visual_entities[f"__{key}__"] = label
-            else:
-                visual_entities[key] = f"   {label}"
-
-        current = self.config_entry.options.get(
-            CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, [])
-        )
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_ENTITIES, default=current): cv.multi_select(visual_entities),
-            }
-        )
-        return self.async_show_form(step_id="user", data_schema=schema)
