@@ -20,7 +20,8 @@ from .const import DOMAIN
 
 # Importa las constantes de configuración definidas en config_flow.py
 from .config_flow import (
-    CONF_API_URL, 
+    # CAMBIO: Eliminado CONF_API_URL
+    CONF_API_TOKEN, # CAMBIO: Añadido
     CONF_SCAN_INTERVAL, 
     CONF_GREEN_DEVICES, 
     CONF_YELLOW_DEVICES
@@ -28,26 +29,23 @@ from .config_flow import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# La plataforma principal del componente
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+# CAMBIO: URL Fija de la API
+HARDCODED_API_URL = "http://flex.spock.es/api/status"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Control from a config entry."""
 
-    # 1. Inicializar el coordinador y pasar la configuración
     coordinator = EnergyControlCoordinator(hass, entry.data)
     
-    # 2. Guardar las listas de dispositivos en el coordinador
     coordinator.green_devices = entry.data.get(CONF_GREEN_DEVICES, [])
     coordinator.yellow_devices = entry.data.get(CONF_YELLOW_DEVICES, [])
 
-    # 3. Solicitar la primera actualización
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
-
-    # 4. Establecer las plataformas (ej. sensor)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -67,9 +65,11 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
     def __init__(self, hass: HomeAssistant, config: dict):
         """Initialize my coordinator."""
         self.config = config
-        self.api_url = config[CONF_API_URL]
         
-        # Inicialización de listas de dispositivos
+        # CAMBIO: Obtener el API Token de la configuración
+        self.api_token = config[CONF_API_TOKEN]
+        # CAMBIO: Eliminada la self.api_url
+
         self.green_devices: list[str] = []
         self.yellow_devices: list[str] = []
 
@@ -84,13 +84,17 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
 
     async def _async_update_data(self) -> dict[str, str]:
         """Fetch data from API endpoint and execute SGReady actions."""
-        # ESTE BLOQUE 'try' ES LA INDENTACIÓN QUE FALTABA
         try:
-            # 1. Realizar la llamada a la API
+            # CAMBIO: Preparar la cabecera de autenticación
+            headers = {"Authorization": f"Bearer {self.api_token}"}
+
             async with aiohttp.ClientSession() as session:
-                full_url = self.api_url if "://" in self.api_url else f"http://{self.api_url}"
                 
-                async with session.get(full_url) as response:
+                # CAMBIO: Usar la URL fija y los headers
+                async with session.get(HARDCODED_API_URL, headers=headers) as response:
+                    
+                    if response.status == 401: # Error de autorización
+                         raise UpdateFailed(f"API Token inválido o caducado (Error 401)")
                     if response.status != 200:
                         raise UpdateFailed(f"API returned status {response.status}")
                     
@@ -100,7 +104,7 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
                          _LOGGER.error("API response format is incorrect: %s", data)
                          raise UpdateFailed("API response format is incorrect.")
 
-            # 2. Procesa la respuesta y ejecuta acciones SGReady
+            # Procesa la respuesta y ejecuta acciones (sin cambios)
             await self._execute_sgready_actions(data)
             
             return data
