@@ -19,6 +19,7 @@ from homeassistant.helpers.update_coordinator import (
 from .const import DOMAIN 
 
 # Importa las constantes de configuración definidas en config_flow.py
+# (Asegúrate de que estas constantes existen en config_flow.py como en el código anterior)
 from .config_flow import (
     CONF_API_URL, 
     CONF_SCAN_INTERVAL, 
