@@ -42,23 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Control from a config entry."""
 
     # Fusiona la configuración inicial (data) con la reconfigurada (options)
-    # Las 'options' tienen prioridad
     config_data = {**entry.data, **entry.options}
 
     # Inicializa el coordinador con la configuración fusionada
     coordinator = EnergyControlCoordinator(hass, config_data)
     
-    # Carga las listas de dispositivos desde la configuración fusionada
-    coordinator.green_devices = config_data.get(CONF_GREEN_DEVICES, [])
-    coordinator.yellow_devices = config_data.get(CONF_YELLOW_DEVICES, [])
-    
-    # Añadimos un log para depuración. Revisa tus logs de HA para ver esto.
-    _LOGGER.debug(
-        "Loading Energy Control. Green devices: %s, Yellow devices: %s",
-        coordinator.green_devices,
-        coordinator.yellow_devices
-    )
-
     # Solicita la primera actualización
     await coordinator.async_config_entry_first_refresh()
 
@@ -72,7 +60,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # El listener se elimina automáticamente al descargar la entrada
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
 
@@ -86,17 +73,48 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
         
         # Lee la configuración fusionada
         self.api_token = config[CONF_API_TOKEN]
-        self.green_devices: list[str] = [] # Se llenará en async_setup_entry
-        self.yellow_devices: list[str] = [] # Se llenará en async_setup_entry
         
-        update_interval = timedelta(seconds=config[CONF_SCAN_INTERVAL])
+        # --- CAMBIO ---
+        # Inicializa las listas de dispositivos AQUÍ, no en async_setup_entry
+        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
+        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
+        
+        # --- CAMBIO ---
+        # Añadida lógica robusta para leer el intervalo de escaneo
+        scan_interval_seconds = 60 # Default
+        try:
+            # Forzamos la conversión a int, por si acaso
+            scan_interval_seconds = int(config.get(CONF_SCAN_INTERVAL, 60))
+            if scan_interval_seconds < 10:
+                scan_interval_seconds = 10 # Mínimo 10 segundos
+        except (ValueError, TypeError):
+            _LOGGER.warning(
+                "Valor de Scan Interval inválido (%s), usando 60 segundos por defecto",
+                config.get(CONF_SCAN_INTERVAL)
+            )
+            scan_interval_seconds = 60
+        
+        _LOGGER.debug(
+            "Coordinador inicializado. Intervalo de actualización: %s segundos",
+            scan_interval_seconds
+        )
+        
+        update_interval = timedelta(seconds=scan_interval_seconds)
 
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=update_interval,
+            update_interval=update_interval, # Pasa el intervalo al coordinador
         )
+        
+        # Log para verificar que las listas se cargaron
+        _LOGGER.debug(
+            "Listas de dispositivos cargadas en coordinador: Green=%s, Yellow=%s",
+            self.green_devices,
+            self.yellow_devices
+        )
+
 
     async def _async_update_data(self) -> dict[str, str]:
         """Fetch data from API endpoint and execute SGReady actions."""
@@ -142,7 +160,6 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
         for device_type, state in status_data.items():
             devices_to_control = device_groups.get(device_type)
             
-            # Log de depuración para saber por qué "no hace nada"
             if not devices_to_control:
                 _LOGGER.debug(
                     "No devices configured for group '%s', skipping action.", device_type
