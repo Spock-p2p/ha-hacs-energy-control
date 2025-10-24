@@ -88,15 +88,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 return self.async_create_entry(title="Energy Control", data=user_input)
 
-        # Muestra el formulario por primera vez
         return self.async_show_form(
             step_id="user", 
-            data_schema=_get_schema({}), # Schema vacío
+            data_schema=_get_schema({}),
             errors=errors
         )
 
-    # --- CAMBIO ---
-    # Esta función registra el OptionsFlowHandler de abajo
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -106,22 +103,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return OptionsFlowHandler(config_entry)
 
 
-# --- CAMBIO ---
-# Esta clase NUEVA maneja la RECONFIGURACIÓN
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Maneja el flujo de opciones (reconfiguración)."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Inicializa el flujo de opciones."""
-        self.config_entry = config_entry
-        # Fusiona 'data' (instalación) y 'options' (reconfig.) para tener los últimos valores
-        self.current_config = {**config_entry.data, **config_entry.options}
-
+    # --- CAMBIO ---
+    # Eliminado el __init__ para quitar el warning de "deprecated"
+    # self.config_entry es inyectado por Home Assistant
+    
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Gestiona el formulario de opciones."""
         errors: dict[str, str] = {}
+        
+        # Carga la configuración actual aquí
+        current_config = {**self.config_entry.data, **self.config_entry.options}
 
         if user_input is not None:
             errors = _validate_input(user_input)
@@ -129,9 +125,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Guarda los cambios en el diccionario 'options'
                 return self.async_create_entry(title="", data=user_input)
 
-        # Muestra el formulario de opciones, pre-rellenado con la config actual
+        # Muestra el formulario de opciones, pre-rellenado
         return self.async_show_form(
             step_id="init",
-            data_schema=_get_schema(self.current_config),
+            data_schema=_get_schema(current_config),
             errors=errors,
         )
