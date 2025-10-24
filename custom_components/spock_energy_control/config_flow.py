@@ -7,7 +7,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, CONF_ENTITIES, CONF_API_TOKEN
 
-# Dominios admitidos con etiquetas de grupo
+# Dominios admitidos con etiquetas de grupo (solo ASCII)
 SUPPORTED_DOMAINS = {
     "switch": "Switches",
     "light": "Luces",
@@ -37,13 +37,12 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
 
         for ent in entity_registry.entities.values():
-            if ent.domain in SUPPORTED_DOMAINS.keys():
+            if ent.domain in SUPPORTED_DOMAINS:
                 state = self.hass.states.get(ent.entity_id)
-                friendly_name = (
-                    state.attributes.get("friendly_name")
-                    if state and "friendly_name" in state.attributes
-                    else ent.entity_id
-                )
+                if state and isinstance(state.attributes, dict):
+                    friendly_name = state.attributes.get("friendly_name", ent.entity_id)
+                else:
+                    friendly_name = ent.entity_id
                 grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
 
         # Ordenar por dominio y luego por nombre
@@ -52,7 +51,7 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 continue
             label_header = SUPPORTED_DOMAINS[domain]
             for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                grouped_entities[entity_id] = f"{label_header} › {name}"
+                grouped_entities[entity_id] = f"{label_header} - {name}"
 
         schema = vol.Schema(
             {
@@ -60,7 +59,6 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(grouped_entities),
             }
         )
-
         return self.async_show_form(step_id="user", data_schema=schema)
 
     @staticmethod
@@ -79,7 +77,6 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
-            # Guardar en options (no sobreescribimos data)
             return self.async_create_entry(title="", data=user_input)
 
         entity_registry = er.async_get(self.hass)
@@ -89,13 +86,12 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
         }
 
         for ent in entity_registry.entities.values():
-            if ent.domain in SUPPORTED_DOMAINS.keys():
+            if ent.domain in SUPPORTED_DOMAINS:
                 state = self.hass.states.get(ent.entity_id)
-                friendly_name = (
-                    state.attributes.get("friendly_name")
-                    if state and "friendly_name" in state.attributes
-                    else ent.entity_id
-                )
+                if state and isinstance(state.attributes, dict):
+                    friendly_name = state.attributes.get("friendly_name", ent.entity_id)
+                else:
+                    friendly_name = ent.entity_id
                 grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
 
         # Ordenar y agrupar igual que en el flujo inicial
@@ -104,7 +100,7 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
                 continue
             label_header = SUPPORTED_DOMAINS[domain]
             for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                grouped_entities[entity_id] = f"{label_header} › {name}"
+                grouped_entities[entity_id] = f"{label_header} - {name}"
 
         current = self.config_entry.options.get(
             CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, [])
@@ -112,10 +108,7 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_ENTITIES, default=current): cv.multi_select(
-                    grouped_entities
-                ),
+                vol.Required(CONF_ENTITIES, default=current): cv.multi_select(grouped_entities),
             }
         )
-
         return self.async_show_form(step_id="user", data_schema=schema)
