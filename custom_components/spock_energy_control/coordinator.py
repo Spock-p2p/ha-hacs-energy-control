@@ -1,7 +1,8 @@
 import logging
 from datetime import timedelta
-
+import asyncio
 import async_timeout
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -9,6 +10,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import DOMAIN, ENDPOINT_URL, UPDATE_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class SpockEnergyCoordinator(DataUpdateCoordinator):
     """Coordinator que consulta el endpoint remoto y expone la acción."""
@@ -20,17 +22,26 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
             name=f"{DOMAIN}_coordinator",
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
+        self.hass = hass
         self._session = async_get_clientsession(hass)
-        self.api_token = api_token  # <- aquí sin guion bajo, para mantenerlo simple y consistente
+        self.api_token = api_token  # mantenerlo simple y consistente
 
     async def _async_update_data(self):
-        """Consultar el endpoint remoto con autenticación."""
+        """Consultar el endpoint remoto con autenticación (seguro en cualquier hilo)."""
         try:
+            # Garantizar que estamos dentro de un event loop activo
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
             async with async_timeout.timeout(10):
                 headers = {"X-Auth-Token": self.api_token}
                 async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
                     resp.raise_for_status()
                     data = await resp.json(content_type=None)
+
         except Exception as err:
             raise UpdateFailed(f"HTTP error: {err}") from err
 
