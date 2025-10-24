@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from homeassistant import config_entries
 import voluptuous as vol
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, device_registry as dr
 import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, CONF_ENTITIES, CONF_API_TOKEN
 
-# Dominios admitidos con etiquetas de grupo
 SUPPORTED_DOMAINS = {
     "switch": "Switches",
     "light": "Luces",
@@ -29,33 +28,47 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         entity_registry = er.async_get(self.hass)
-        grouped_entities: dict[str, str] = {}
+        device_registry = dr.async_get(self.hass)
 
-        # Recoger entidades y agrupar por dominio
+        grouped_entities: dict[str, str] = {}
         grouped_by_domain: dict[str, list[tuple[str, str]]] = {
             dom: [] for dom in SUPPORTED_DOMAINS.keys()
         }
 
         for ent in entity_registry.entities.values():
-            if ent.domain in SUPPORTED_DOMAINS:
-                # Intentar obtener el nombre más descriptivo posible
-                friendly_name = getattr(ent, "original_name", None) or getattr(ent, "name", None)
-                if not friendly_name:
-                    state = self.hass.states.get(ent.entity_id)
-                    if state and isinstance(state.attributes, dict):
-                        friendly_name = state.attributes.get("friendly_name", ent.entity_id)
-                    else:
-                        friendly_name = ent.entity_id
+            if ent.domain not in SUPPORTED_DOMAINS:
+                continue
 
-                grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+            # --- Obtener nombre de dispositivo (más descriptivo) ---
+            device_name = None
+            if ent.device_id:
+                device = device_registry.async_get(ent.device_id)
+                if device:
+                    device_name = device.name_by_user or device.name
 
-        # Ordenar por dominio y luego por nombre
+            # --- Fallbacks de nombre ---
+            friendly_name = (
+                device_name
+                or getattr(ent, "original_name", None)
+                or getattr(ent, "name", None)
+            )
+
+            if not friendly_name:
+                state = self.hass.states.get(ent.entity_id)
+                if state and isinstance(state.attributes, dict):
+                    friendly_name = state.attributes.get("friendly_name", ent.entity_id)
+                else:
+                    friendly_name = ent.entity_id
+
+            grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+
+        # --- Ordenar y agrupar ---
         for domain, entries in grouped_by_domain.items():
             if not entries:
                 continue
             label_header = SUPPORTED_DOMAINS[domain]
             for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                grouped_entities[entity_id] = f"{label_header} - {name}"
+                grouped_entities[entity_id] = f"{name} ({label_header})"
 
         schema = vol.Schema(
             {
@@ -63,6 +76,7 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_ENTITIES, default=[]): cv.multi_select(grouped_entities),
             }
         )
+
         return self.async_show_form(step_id="user", data_schema=schema)
 
     @staticmethod
@@ -81,35 +95,47 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
-            # Guardar en options (no sobreescribimos data)
             return self.async_create_entry(title="", data=user_input)
 
         entity_registry = er.async_get(self.hass)
+        device_registry = dr.async_get(self.hass)
+
         grouped_entities: dict[str, str] = {}
         grouped_by_domain: dict[str, list[tuple[str, str]]] = {
             dom: [] for dom in SUPPORTED_DOMAINS.keys()
         }
 
         for ent in entity_registry.entities.values():
-            if ent.domain in SUPPORTED_DOMAINS:
-                # Intentar obtener el nombre más descriptivo posible
-                friendly_name = getattr(ent, "original_name", None) or getattr(ent, "name", None)
-                if not friendly_name:
-                    state = self.hass.states.get(ent.entity_id)
-                    if state and isinstance(state.attributes, dict):
-                        friendly_name = state.attributes.get("friendly_name", ent.entity_id)
-                    else:
-                        friendly_name = ent.entity_id
+            if ent.domain not in SUPPORTED_DOMAINS:
+                continue
 
-                grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+            device_name = None
+            if ent.device_id:
+                device = device_registry.async_get(ent.device_id)
+                if device:
+                    device_name = device.name_by_user or device.name
 
-        # Ordenar y agrupar igual que en el flujo inicial
+            friendly_name = (
+                device_name
+                or getattr(ent, "original_name", None)
+                or getattr(ent, "name", None)
+            )
+
+            if not friendly_name:
+                state = self.hass.states.get(ent.entity_id)
+                if state and isinstance(state.attributes, dict):
+                    friendly_name = state.attributes.get("friendly_name", ent.entity_id)
+                else:
+                    friendly_name = ent.entity_id
+
+            grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
+
         for domain, entries in grouped_by_domain.items():
             if not entries:
                 continue
             label_header = SUPPORTED_DOMAINS[domain]
             for entity_id, name in sorted(entries, key=lambda x: x[1].lower()):
-                grouped_entities[entity_id] = f"{label_header} - {name}"
+                grouped_entities[entity_id] = f"{name} ({label_header})"
 
         current = self.config_entry.options.get(
             CONF_ENTITIES, self.config_entry.data.get(CONF_ENTITIES, [])
