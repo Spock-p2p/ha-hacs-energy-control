@@ -49,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # --- Ciclo de comprobación (ahora thread-safe) ---
+    # --- Ciclo de comprobación (thread-safe) ---
     async def _tick(now):
         cfg = hass.data[DOMAIN][entry.entry_id]
         if not cfg[DATA_ACTIVE]:
@@ -69,20 +69,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if action == "stop":
             _LOGGER.info("Apagando entidades: %s", target_entities)
             await hass.services.async_call(
-                "homeassistant", "turn_off", {"entity_id": target_entities}, blocking=False
+                "homeassistant",
+                "turn_off",
+                {"entity_id": target_entities},
+                blocking=False,
             )
         elif action == "start":
             _LOGGER.info("Encendiendo entidades: %s", target_entities)
             await hass.services.async_call(
-                "homeassistant", "turn_on", {"entity_id": target_entities}, blocking=False
+                "homeassistant",
+                "turn_on",
+                {"entity_id": target_entities},
+                blocking=False,
             )
 
     def _safe_tick(now):
-    """Ejecutar el tick dentro del hilo principal, compatible con futuras versiones."""
-    try:
-        hass.async_create_background_task(_tick(now), "spock_energy_control_tick")
-    except AttributeError:
-        hass.loop.call_soon_threadsafe(hass.async_create_task, _tick(now))
+        """Ejecutar el tick dentro del hilo principal, compatible con futuras versiones."""
+        try:
+            # Home Assistant 2025.4+ (nuevo método)
+            hass.async_create_background_task(_tick(now), "spock_energy_control_tick")
+        except AttributeError:
+            # Compatibilidad con versiones anteriores
+            hass.loop.call_soon_threadsafe(hass.async_create_task, _tick(now))
 
     unsub = async_track_time_interval(
         hass, _safe_tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
@@ -100,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Actualizar lista de entidades si cambian las opciones desde la UI."""
     cfg = hass.data[DOMAIN][entry.entry_id]
     new_entities = entry.options.get(CONF_ENTITIES, entry.data.get(CONF_ENTITIES, []))
     cfg[DATA_ENTITIES] = new_entities
@@ -107,6 +116,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Desinstalar integración."""
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     cfg = hass.data[DOMAIN].pop(entry.entry_id, None)
     if cfg and cfg.get(DATA_UNSUB):
