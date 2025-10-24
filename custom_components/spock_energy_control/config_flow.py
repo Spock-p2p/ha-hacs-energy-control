@@ -21,7 +21,7 @@ DOMAINS_TO_FILTER = ["switch", "light", "fan", "climate", "media_player"]
 
 
 # Constantes de configuración
-CONF_API_URL = "api_url"
+CONF_API_TOKEN = "api_token"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_GREEN_DEVICES = "green_devices"
 CONF_YELLOW_DEVICES = "yellow_devices"
@@ -29,10 +29,15 @@ CONF_YELLOW_DEVICES = "yellow_devices"
 # Esquema base para el formulario de configuración
 DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_API_URL): str,
+        # CAMBIO: Añadido API Token como campo de contraseña
+        vol.Required(CONF_API_TOKEN): selector.TextSelector(
+            selector.TextSelectorConfig(type="password")
+        ),
+        # CAMBIO: Eliminado CONF_API_URL
+        
         vol.Required(CONF_SCAN_INTERVAL, default=60): vol.All(vol.Coerce(int), vol.Range(min=10)),
         
-        # Selector para Green Devices (SGReady) - Usa EntitySelector con filtro de dominio
+        # Selector para Green Devices (SGReady)
         vol.Required(CONF_GREEN_DEVICES, default=[]): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain=DOMAINS_TO_FILTER,
@@ -40,7 +45,7 @@ DATA_SCHEMA = vol.Schema(
             )
         ),
         
-        # Selector para Yellow Devices (SGReady) - Usa EntitySelector con filtro de dominio
+        # Selector para Yellow Devices (SGReady)
         vol.Required(CONF_YELLOW_DEVICES, default=[]): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain=DOMAINS_TO_FILTER,
@@ -63,11 +68,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         
         if user_input is not None:
-            # 1. Validación de la exclusividad
+            # 1. Validación de la exclusividad (sin cambios)
             green_devices = set(user_input.get(CONF_GREEN_DEVICES, []))
             yellow_devices = set(user_input.get(CONF_YELLOW_DEVICES, []))
             
-            # Comprobar si hay entidades seleccionadas en ambas listas
             if green_devices.intersection(yellow_devices):
                 errors["base"] = "exclusive_devices" 
             else:
