@@ -27,12 +27,22 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
         self.api_token = api_token
 
     async def _async_update_data(self):
-        """Consultar el endpoint remoto con autenticación, seguro para cualquier hilo."""
+        """Consultar el endpoint remoto con autenticación dentro del event loop principal."""
         try:
-            # Ejecutar la llamada HTTP dentro del event loop principal de Home Assistant
-            data = await self.hass.async_add_executor_job(self._fetch_data)
+            # Forzar ejecución en el event loop principal de Home Assistant
+            return await asyncio.run_coroutine_threadsafe(
+                self._fetch_data(), self.hass.loop
+            ).result()
         except Exception as err:
             raise UpdateFailed(f"HTTP error: {err}") from err
+
+    async def _fetch_data(self):
+        """Petición HTTP real (siempre dentro del event loop principal)."""
+        async with async_timeout.timeout(10):
+            headers = {"X-Auth-Token": self.api_token}
+            async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
 
         action = (data or {}).get("action")
         if action not in ("start", "stop"):
@@ -41,15 +51,3 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("Acción recibida: %s", action)
         return {"action": action}
-
-    def _fetch_data(self):
-        """Función síncrona que realiza la llamada HTTP, ejecutada dentro del loop principal."""
-        import requests  # uso seguro dentro de executor
-        headers = {"X-Auth-Token": self.api_token}
-        try:
-            resp = requests.get(ENDPOINT_URL, headers=headers, timeout=10)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as err:
-            _LOGGER.error("Error HTTP en SpockEnergyCoordinator: %s", err)
-            raise err
