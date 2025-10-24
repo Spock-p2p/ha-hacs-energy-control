@@ -1,4 +1,4 @@
-# Spock Energy Control
+# Spock Energy Control V1.0.1
 
 <p align="center">
   <img src="https://github.com/Spock-p2p/ha-hacs-energy-control/blob/main/logo.png" width="75"/>
