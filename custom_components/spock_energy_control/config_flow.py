@@ -105,8 +105,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Maneja el flujo de opciones (reconfiguración)."""
 
-    # --- CAMBIO ---
-    # Vuelto a añadir el __init__ para corregir el error 500
+    #
+    # --- ESTA ES LA PARTE QUE CORRIGE EL ERROR ---
+    # Home Assistant está cargando una versión sin esto.
+    #
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Inicializa el flujo de opciones."""
         self.config_entry = config_entry
