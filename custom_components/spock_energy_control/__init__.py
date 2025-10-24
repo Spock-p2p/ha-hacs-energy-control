@@ -15,13 +15,10 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-# Importa las constantes del componente
 from .const import DOMAIN 
 
-# Importa las constantes de configuración definidas en config_flow.py
 from .config_flow import (
-    # CAMBIO: Eliminado CONF_API_URL
-    CONF_API_TOKEN, # CAMBIO: Añadido
+    CONF_API_TOKEN,
     CONF_SCAN_INTERVAL, 
     CONF_GREEN_DEVICES, 
     CONF_YELLOW_DEVICES
@@ -31,8 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
-# CAMBIO: URL Fija de la API
-HARDCODED_API_URL = "http://flex.spock.es/api/status"
+HARDCODED_API_URL = "https://flex.spock.es/api/status"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -65,14 +61,9 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
     def __init__(self, hass: HomeAssistant, config: dict):
         """Initialize my coordinator."""
         self.config = config
-        
-        # CAMBIO: Obtener el API Token de la configuración
         self.api_token = config[CONF_API_TOKEN]
-        # CAMBIO: Eliminada la self.api_url
-
         self.green_devices: list[str] = []
         self.yellow_devices: list[str] = []
-
         update_interval = timedelta(seconds=config[CONF_SCAN_INTERVAL])
 
         super().__init__(
@@ -85,26 +76,30 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
     async def _async_update_data(self) -> dict[str, str]:
         """Fetch data from API endpoint and execute SGReady actions."""
         try:
-            # CAMBIO: Preparar la cabecera de autenticación
-            headers = {"Authorization": f"Bearer {self.api_token}"}
+            #
+            # --- ESTE ES EL CAMBIO ---
+            # El servidor espera 'X-Auth-Token', no 'Authorization: Bearer'
+            #
+            headers = {"X-Auth-Token": self.api_token}
 
             async with aiohttp.ClientSession() as session:
                 
-                # CAMBIO: Usar la URL fija y los headers
                 async with session.get(HARDCODED_API_URL, headers=headers) as response:
                     
-                    if response.status == 401: # Error de autorización
-                         raise UpdateFailed(f"API Token inválido o caducado (Error 401)")
+                    if response.status == 403: # Cambiado de 401 a 403 (Forbidden)
+                         raise UpdateFailed(f"API Token inválido (Error 403 Forbidden)")
                     if response.status != 200:
+                        response_text = await response.text()
+                        _LOGGER.error("API error %s: %s", response.status, response_text)
                         raise UpdateFailed(f"API returned status {response.status}")
                     
-                    data = await response.json()
+                    # Dejamos content_type=None por si acaso, aunque la GCF ya debería ir bien
+                    data = await response.json(content_type=None)
                     
                     if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                          _LOGGER.error("API response format is incorrect: %s", data)
                          raise UpdateFailed("API response format is incorrect.")
 
-            # Procesa la respuesta y ejecuta acciones (sin cambios)
             await self._execute_sgready_actions(data)
             
             return data
@@ -112,6 +107,8 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Error communicating with API: {err}")
         except Exception as err:
+            if isinstance(err, UpdateFailed):
+                raise
             raise UpdateFailed(f"An unexpected error occurred: {err}")
 
     async def _execute_sgready_actions(self, status_data: dict):
