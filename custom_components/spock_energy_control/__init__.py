@@ -32,7 +32,6 @@ PLATFORMS: list[Platform] = []
 HARDCODED_API_URL = "https://flex.spock.es/api/status"
 
 
-# Esta función se llamará automáticamente cuando guardes la reconfiguración
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
@@ -41,24 +40,17 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Energy Control from a config entry."""
 
-    # Fusiona la configuración inicial (data) con la reconfigurada (options)
     config_data = {**entry.data, **entry.options}
-
-    # 1. Inicializa el coordinador con la configuración fusionada
     coordinator = EnergyControlCoordinator(hass, config_data)
     
-    # --- CAMBIO ---
-    # 2. Almacena el coordinador en hass.data PRIMERO.
-    #    Esto es crucial para que el planificador de polling se inicie correctamente.
+    # Almacena el coordinador en hass.data PRIMERO
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # 3. Registra el "listener" para la reconfiguración
+    # Registra el "listener" para la reconfiguración
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     
-    # 4. AHORA, ejecuta el primer refresh.
-    #    Como el coordinador ya está registrado, el polling se planificará.
+    # AHORA, ejecuta el primer refresh
     await coordinator.async_config_entry_first_refresh()
-    # --- FIN DEL CAMBIO ---
 
     return True
 
@@ -75,7 +67,21 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
     def __init__(self, hass: HomeAssistant, config: dict):
         """Initialize my coordinator."""
         
-        # Primero, obtener el intervalo
+        # --- CAMBIO ---
+        # Define todas las propiedades de la clase PRIMERO
+        self.hass = hass
+        self.config = config
+        self.api_token = config[CONF_API_TOKEN]
+        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
+        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
+        
+        _LOGGER.debug(
+            "Listas de dispositivos cargadas en coordinador: Green=%s, Yellow=%s",
+            self.green_devices,
+            self.yellow_devices
+        )
+        
+        # Calcula el intervalo de actualización
         scan_interval_seconds = 60 # Default
         try:
             scan_interval_seconds = int(config.get(CONF_SCAN_INTERVAL, 60))
@@ -95,24 +101,13 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
             scan_interval_seconds
         )
 
-        # Segundo, llamar a super().__init__
+        # --- CAMBIO ---
+        # Llama a super().__init__ AL FINAL, una vez que todo esté definido
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
             update_interval=update_interval,
-        )
-        
-        # Tercero, configurar las propiedades de esta clase
-        self.config = config
-        self.api_token = config[CONF_API_TOKEN]
-        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
-        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
-        
-        _LOGGER.debug(
-            "Listas de dispositivos cargadas en coordinador: Green=%s, Yellow=%s",
-            self.green_devices,
-            self.yellow_devices
         )
 
 
@@ -135,7 +130,7 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
                     
                     if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                          _LOGGER.error("API response format is incorrect: %s", data)
-                         raise UpdateFailed("API response format is incorrect.")
+                         raise UpdateFailed("API response format isC incorrect.")
 
             await self._execute_sgready_actions(data)
             return data
