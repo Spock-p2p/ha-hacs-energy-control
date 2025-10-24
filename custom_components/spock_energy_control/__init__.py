@@ -44,16 +44,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Fusiona la configuración inicial (data) con la reconfigurada (options)
     config_data = {**entry.data, **entry.options}
 
-    # Inicializa el coordinador con la configuración fusionada
+    # 1. Inicializa el coordinador con la configuración fusionada
     coordinator = EnergyControlCoordinator(hass, config_data)
     
-    # Solicita la primera actualización
-    await coordinator.async_config_entry_first_refresh()
-
+    # --- CAMBIO ---
+    # 2. Almacena el coordinador en hass.data PRIMERO.
+    #    Esto es crucial para que el planificador de polling se inicie correctamente.
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    # Registra el "listener" para la reconfiguración
+    # 3. Registra el "listener" para la reconfiguración
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    
+    # 4. AHORA, ejecuta el primer refresh.
+    #    Como el coordinador ya está registrado, el polling se planificará.
+    await coordinator.async_config_entry_first_refresh()
+    # --- FIN DEL CAMBIO ---
 
     return True
 
@@ -69,24 +74,13 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
 
     def __init__(self, hass: HomeAssistant, config: dict):
         """Initialize my coordinator."""
-        self.config = config
         
-        # Lee la configuración fusionada
-        self.api_token = config[CONF_API_TOKEN]
-        
-        # --- CAMBIO ---
-        # Inicializa las listas de dispositivos AQUÍ, no en async_setup_entry
-        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
-        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
-        
-        # --- CAMBIO ---
-        # Añadida lógica robusta para leer el intervalo de escaneo
+        # Primero, obtener el intervalo
         scan_interval_seconds = 60 # Default
         try:
-            # Forzamos la conversión a int, por si acaso
             scan_interval_seconds = int(config.get(CONF_SCAN_INTERVAL, 60))
             if scan_interval_seconds < 10:
-                scan_interval_seconds = 10 # Mínimo 10 segundos
+                scan_interval_seconds = 10
         except (ValueError, TypeError):
             _LOGGER.warning(
                 "Valor de Scan Interval inválido (%s), usando 60 segundos por defecto",
@@ -94,21 +88,27 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
             )
             scan_interval_seconds = 60
         
+        update_interval = timedelta(seconds=scan_interval_seconds)
+        
         _LOGGER.debug(
             "Coordinador inicializado. Intervalo de actualización: %s segundos",
             scan_interval_seconds
         )
-        
-        update_interval = timedelta(seconds=scan_interval_seconds)
 
+        # Segundo, llamar a super().__init__
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=update_interval, # Pasa el intervalo al coordinador
+            update_interval=update_interval,
         )
         
-        # Log para verificar que las listas se cargaron
+        # Tercero, configurar las propiedades de esta clase
+        self.config = config
+        self.api_token = config[CONF_API_TOKEN]
+        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
+        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
+        
         _LOGGER.debug(
             "Listas de dispositivos cargadas en coordinador: Green=%s, Yellow=%s",
             self.green_devices,
