@@ -49,9 +49,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Registra el "listener" para la reconfiguración
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     
-    # --- CAMBIO ---
-    # Hemos comentado la primera actualización manual.
-    # El coordinador ahora debería esperar 15 segundos y empezar por sí solo.
+    # Dejamos la primera actualización manual COMENTADA.
+    # El temporizador interno del coordinador debe iniciarse solo.
     # await coordinator.async_config_entry_first_refresh()
 
     return True
@@ -69,7 +68,21 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
     def __init__(self, hass: HomeAssistant, config: dict):
         """Initialize my coordinator."""
         
-        # 1. Calcula el intervalo PRIMERO
+        # --- CAMBIO: ORDEN DE INICIALIZACIÓN ---
+        
+        # 1. Define todas las propiedades de la clase PRIMERO
+        self.config = config
+        self.api_token = config[CONF_API_TOKEN]
+        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
+        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
+        
+        _LOGGER.debug(
+            "Listas de dispositivos cargadas en coordinador: Green=%s, Yellow=%s",
+            self.green_devices,
+            self.yellow_devices
+        )
+        
+        # 2. Calcula el intervalo de actualización
         scan_interval_seconds = 60 # Default
         try:
             scan_interval_seconds = int(config.get(CONF_SCAN_INTERVAL, 60))
@@ -89,30 +102,19 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
             scan_interval_seconds
         )
 
-        # 2. Llama a super().__init__ SEGUNDO (para iniciar el planificador)
+        # 3. Llama a super().__init__ AL FINAL (esto inicia el temporizador)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
             update_interval=update_interval,
         )
-        
-        # 3. Define el resto de propiedades de la clase TERCERO
-        self.config = config
-        self.api_token = config[CONF_API_TOKEN]
-        self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
-        self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
-        
-        _LOGGER.debug(
-            "Listas de dispositivos cargadas en coordinador: Green=%s, Yellow=%s",
-            self.green_devices,
-            self.yellow_devices
-        )
 
 
     async def _async_update_data(self) -> dict[str, str]:
         """Fetch data from API endpoint and execute SGReady actions."""
-        _LOGGER.debug("Fetching API data from %s", HARDCODED_API_URL)
+        # Esta es la línea que deberías ver cada 15 segundos
+        _LOGGER.debug("Fetching API data from %s", HARDCODED_API_URL) 
         try:
             headers = {"X-Auth-Token": self.api_token}
             async with aiohttp.ClientSession() as session:
