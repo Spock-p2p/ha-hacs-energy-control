@@ -28,7 +28,6 @@ CONF_YELLOW_DEVICES = "yellow_devices"
 
 def _get_schema(config_data: dict[str, Any]) -> vol.Schema:
     """Genera el esquema de Voluptuous basado en la configuración existente."""
-    # Si no hay datos (primera vez), usa defaults
     if not config_data:
         config_data = {
             CONF_SCAN_INTERVAL: 60, 
@@ -107,8 +106,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     """Maneja el flujo de opciones (reconfiguración)."""
 
     # --- CAMBIO ---
-    # Eliminado el __init__ para quitar el warning de "deprecated"
-    # self.config_entry es inyectado por Home Assistant
+    # Vuelto a añadir el __init__ para corregir el error 500
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Inicializa el flujo de opciones."""
+        self.config_entry = config_entry
     
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -116,16 +117,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Gestiona el formulario de opciones."""
         errors: dict[str, str] = {}
         
-        # Carga la configuración actual aquí
+        # Carga la configuración actual
         current_config = {**self.config_entry.data, **self.config_entry.options}
 
         if user_input is not None:
             errors = _validate_input(user_input)
             if not errors:
-                # Guarda los cambios en el diccionario 'options'
                 return self.async_create_entry(title="", data=user_input)
 
-        # Muestra el formulario de opciones, pre-rellenado
         return self.async_show_form(
             step_id="init",
             data_schema=_get_schema(current_config),
