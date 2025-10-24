@@ -7,7 +7,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, CONF_ENTITIES, CONF_API_TOKEN
 
-# Dominios admitidos con etiquetas de grupo (solo ASCII)
+# Dominios admitidos con etiquetas de grupo
 SUPPORTED_DOMAINS = {
     "switch": "Switches",
     "light": "Luces",
@@ -38,11 +38,15 @@ class SpockEnergyControlFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         for ent in entity_registry.entities.values():
             if ent.domain in SUPPORTED_DOMAINS:
-                state = self.hass.states.get(ent.entity_id)
-                if state and isinstance(state.attributes, dict):
-                    friendly_name = state.attributes.get("friendly_name", ent.entity_id)
-                else:
-                    friendly_name = ent.entity_id
+                # Intentar obtener el nombre más descriptivo posible
+                friendly_name = getattr(ent, "original_name", None) or getattr(ent, "name", None)
+                if not friendly_name:
+                    state = self.hass.states.get(ent.entity_id)
+                    if state and isinstance(state.attributes, dict):
+                        friendly_name = state.attributes.get("friendly_name", ent.entity_id)
+                    else:
+                        friendly_name = ent.entity_id
+
                 grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
 
         # Ordenar por dominio y luego por nombre
@@ -77,6 +81,7 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
+            # Guardar en options (no sobreescribimos data)
             return self.async_create_entry(title="", data=user_input)
 
         entity_registry = er.async_get(self.hass)
@@ -87,11 +92,15 @@ class SpockEnergyControlOptionsFlow(config_entries.OptionsFlow):
 
         for ent in entity_registry.entities.values():
             if ent.domain in SUPPORTED_DOMAINS:
-                state = self.hass.states.get(ent.entity_id)
-                if state and isinstance(state.attributes, dict):
-                    friendly_name = state.attributes.get("friendly_name", ent.entity_id)
-                else:
-                    friendly_name = ent.entity_id
+                # Intentar obtener el nombre más descriptivo posible
+                friendly_name = getattr(ent, "original_name", None) or getattr(ent, "name", None)
+                if not friendly_name:
+                    state = self.hass.states.get(ent.entity_id)
+                    if state and isinstance(state.attributes, dict):
+                        friendly_name = state.attributes.get("friendly_name", ent.entity_id)
+                    else:
+                        friendly_name = ent.entity_id
+
                 grouped_by_domain[ent.domain].append((ent.entity_id, friendly_name))
 
         # Ordenar y agrupar igual que en el flujo inicial
