@@ -26,37 +26,46 @@ CONF_SCAN_INTERVAL = "scan_interval"
 CONF_GREEN_DEVICES = "green_devices"
 CONF_YELLOW_DEVICES = "yellow_devices"
 
-# Esquema base para el formulario de configuración
-DATA_SCHEMA = vol.Schema(
-    {
-        # CAMBIO: Añadido API Token como campo de contraseña
-        vol.Required(CONF_API_TOKEN): selector.TextSelector(
-            selector.TextSelectorConfig(type="password")
-        ),
-        # CAMBIO: Eliminado CONF_API_URL
-        
-        vol.Required(CONF_SCAN_INTERVAL, default=60): vol.All(vol.Coerce(int), vol.Range(min=10)),
-        
-        # Selector para Green Devices (SGReady)
-        vol.Required(CONF_GREEN_DEVICES, default=[]): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain=DOMAINS_TO_FILTER,
-                multiple=True,
-            )
-        ),
-        
-        # Selector para Yellow Devices (SGReady)
-        vol.Required(CONF_YELLOW_DEVICES, default=[]): selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain=DOMAINS_TO_FILTER,
-                multiple=True,
-            )
-        ),
-    }
-)
+def _get_schema(config_data: dict[str, Any]) -> vol.Schema:
+    """Genera el esquema de Voluptuous basado en la configuración existente."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_API_TOKEN, 
+                default=config_data.get(CONF_API_TOKEN, "")
+            ): selector.TextSelector(selector.TextSelectorConfig(type="password")),
+            
+            vol.Required(
+                CONF_SCAN_INTERVAL, 
+                default=config_data.get(CONF_SCAN_INTERVAL, 60)
+            ): vol.All(vol.Coerce(int), vol.Range(min=10)),
+            
+            vol.Required(
+                CONF_GREEN_DEVICES, 
+                default=config_data.get(CONF_GREEN_DEVICES, [])
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain=DOMAINS_TO_FILTER, multiple=True)),
+            
+            vol.Required(
+                CONF_YELLOW_DEVICES, 
+                default=config_data.get(CONF_YELLOW_DEVICES, [])
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain=DOMAINS_TO_FILTER, multiple=True)),
+        }
+    )
+
+def _validate_input(user_input: dict[str, Any]) -> dict[str, str]:
+    """Valida la exclusividad de los dispositivos."""
+    errors: dict[str, str] = {}
+    green_devices = set(user_input.get(CONF_GREEN_DEVICES, []))
+    yellow_devices = set(user_input.get(CONF_YELLOW_DEVICES, []))
+    
+    if green_devices.intersection(yellow_devices):
+        errors["base"] = "exclusive_devices"
+    return errors
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+# --- CAMBIO ---
+# Añadimos config_entries.OptionsFlow para manejar la reconfiguración
+class ConfigFlow(config_entries.ConfigFlow, config_entries.OptionsFlow, domain=DOMAIN):
     """Handle a config flow for Energy Control."""
 
     VERSION = 1
@@ -64,23 +73,40 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step."""
+        """Handle the initial step (instalación)."""
         errors: dict[str, str] = {}
         
         if user_input is not None:
-            # 1. Validación de la exclusividad (sin cambios)
-            green_devices = set(user_input.get(CONF_GREEN_DEVICES, []))
-            yellow_devices = set(user_input.get(CONF_YELLOW_DEVICES, []))
-            
-            if green_devices.intersection(yellow_devices):
-                errors["base"] = "exclusive_devices" 
-            else:
-                # 2. Si es válido, crear la entrada de configuración
+            errors = _validate_input(user_input)
+            if not errors:
                 return self.async_create_entry(title="Energy Control", data=user_input)
 
-        # 3. Mostrar el formulario
+        # Muestra el formulario por primera vez
         return self.async_show_form(
             step_id="user", 
-            data_schema=DATA_SCHEMA, 
+            data_schema=_get_schema({}), # Schema vacío para la primera vez
             errors=errors
+        )
+
+    # --- CAMBIO ---
+    # Esta es la nueva función que maneja la reconfiguración
+    async def async_step_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle options flow (reconfiguración)."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            errors = _validate_input(user_input)
+            if not errors:
+                # Guarda la nueva configuración en las "opciones"
+                return self.async_create_entry(title="", data=user_input)
+
+        # Carga la configuración actual (opciones o datos) para pre-rellenar el formulario
+        config_data = {**self.config_entry.data, **self.config_entry.options}
+
+        return self.async_show_form(
+            step_id="options",
+            data_schema=_get_schema(config_data), # Schema pre-rellenado
+            errors=errors,
         )
