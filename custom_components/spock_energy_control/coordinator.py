@@ -6,12 +6,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, ENDPOINT_URL, UPDATE_INTERVAL_SECONDS, CONF_API_TOKEN
+from .const import DOMAIN, ENDPOINT_URL, UPDATE_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
 class SpockEnergyCoordinator(DataUpdateCoordinator):
-    """Coordinator que consulta el endpoint fijo y expone la acción."""
+    """Coordinator que consulta el endpoint remoto y expone la acción."""
 
     def __init__(self, hass: HomeAssistant, api_token: str) -> None:
         super().__init__(
@@ -21,11 +21,11 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
         )
         self._session = async_get_clientsession(hass)
-        self._api_token = api_token
+        self.api_token = api_token  # <- aquí sin guion bajo, para mantenerlo simple y consistente
 
     async def _async_update_data(self):
+        """Consultar el endpoint remoto con autenticación."""
         try:
-            # Reducimos timeout para no bloquear el loop
             async with async_timeout.timeout(10):
                 headers = {"X-Auth-Token": self.api_token}
                 async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
@@ -36,7 +36,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator):
 
         action = (data or {}).get("action")
         if action not in ("start", "stop"):
-            # Permitimos None/valor inválido sin romper el ciclo
             _LOGGER.debug("Respuesta sin acción válida: %s", data)
             return {"action": None}
 
