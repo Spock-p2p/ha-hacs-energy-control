@@ -55,48 +55,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Registrar plataformas (switch virtual)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Programar el ciclo de comprobación en intervalos
-    def _tick(now):
+    # Función asíncrona segura para el ciclo de comprobación
+    async def _tick(now):
         cfg = hass.data[DOMAIN][entry.entry_id]
         if not cfg[DATA_ACTIVE]:
             # Pausado: no consumimos red
             return
 
         coordinator = cfg["coordinator"]
+        await coordinator.async_request_refresh()
+        action = (coordinator.data or {}).get("action")
+        if not action:
+            return
 
-        async def _act():
-            await coordinator.async_request_refresh()
-            action = (coordinator.data or {}).get("action")
-            if not action:
-                return
+        target_entities = cfg[DATA_ENTITIES]
+        if not target_entities:
+            _LOGGER.debug("No hay entidades seleccionadas.")
+            return
 
-            target_entities = cfg[DATA_ENTITIES]
-            if not target_entities:
-                _LOGGER.debug("No hay entidades seleccionadas.")
-                return
+        # Ejecutar acción
+        if action == "stop":
+            _LOGGER.info("Apagando entidades: %s", target_entities)
+            await hass.services.async_call(
+                "homeassistant",
+                "turn_off",
+                {"entity_id": target_entities},
+                blocking=False,
+            )
+        elif action == "start":
+            _LOGGER.info("Encendiendo entidades: %s", target_entities)
+            await hass.services.async_call(
+                "homeassistant",
+                "turn_on",
+                {"entity_id": target_entities},
+                blocking=False,
+            )
 
-            # Ejecutar acción
-            if action == "stop":
-                _LOGGER.info("Apagando entidades: %s", target_entities)
-                await hass.services.async_call(
-                    "homeassistant",
-                    "turn_off",
-                    {"entity_id": target_entities},
-                    blocking=False,
-                )
-            elif action == "start":
-                _LOGGER.info("Encendiendo entidades: %s", target_entities)
-                await hass.services.async_call(
-                    "homeassistant",
-                    "turn_on",
-                    {"entity_id": target_entities},
-                    blocking=False,
-                )
-
-        hass.async_create_task(_act())
-
+    # Programar el ciclo de comprobación en intervalos (async-safe)
     unsub = async_track_time_interval(
-        hass, _tick, timedelta(seconds=UPDATE_INTERVAL_SECONDS)
+        hass,
+        lambda now: hass.async_create_task(_tick(now)),
+        timedelta(seconds=UPDATE_INTERVAL_SECONDS),
     )
     hass.data[DOMAIN][entry.entry_id][DATA_UNSUB] = unsub
 
