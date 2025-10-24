@@ -19,7 +19,6 @@ from homeassistant.helpers.update_coordinator import (
 from .const import DOMAIN 
 
 # Importa las constantes de configuración definidas en config_flow.py
-# (Asegúrate de que estas constantes existen en config_flow.py como en el código anterior)
 from .config_flow import (
     CONF_API_URL, 
     CONF_SCAN_INTERVAL, 
@@ -29,7 +28,7 @@ from .config_flow import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# La plataforma principal del componente, si es necesario, si no, puedes eliminar.
+# La plataforma principal del componente
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
@@ -70,7 +69,7 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
         self.config = config
         self.api_url = config[CONF_API_URL]
         
-        # Inicialización de listas de dispositivos para ser llenadas en async_setup_entry
+        # Inicialización de listas de dispositivos
         self.green_devices: list[str] = []
         self.yellow_devices: list[str] = []
 
@@ -85,20 +84,18 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
 
     async def _async_update_data(self) -> dict[str, str]:
         """Fetch data from API endpoint and execute SGReady actions."""
+        # ESTE BLOQUE 'try' ES LA INDENTACIÓN QUE FALTABA
         try:
             # 1. Realizar la llamada a la API
             async with aiohttp.ClientSession() as session:
-                # Asegurarse de usar un protocolo si no está en la configuración (ej. http://)
                 full_url = self.api_url if "://" in self.api_url else f"http://{self.api_url}"
                 
-                # Ejemplo de URL: http://flex.spock.es/api/status
                 async with session.get(full_url) as response:
                     if response.status != 200:
                         raise UpdateFailed(f"API returned status {response.status}")
                     
                     data = await response.json()
                     
-                    # Verificar el formato de la respuesta (ej. {"green": "start", "yellow": "stop"})
                     if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                          _LOGGER.error("API response format is incorrect: %s", data)
                          raise UpdateFailed("API response format is incorrect.")
@@ -118,21 +115,17 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
         
         _LOGGER.debug("SGReady status received: %s", status_data)
         
-        # Mapeo de los tipos SGReady a las listas de dispositivos
         device_groups = {
             "green": self.green_devices,
             "yellow": self.yellow_devices,
         }
         
-        # Iterar sobre los tipos (green, yellow) en la respuesta
         for device_type, state in status_data.items():
             devices_to_control = device_groups.get(device_type)
             
-            # Solo si la lista de dispositivos está configurada Y no está vacía
             if not devices_to_control:
                 continue
             
-            # Determinar el servicio a llamar
             service = None
             if state == "start":
                 service = "turn_on"
@@ -147,11 +140,10 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, str]]):
                     devices_to_control
                 )
                 
-                # 3. Llamar al servicio de Home Assistant para el grupo de dispositivos
                 await self.hass.services.async_call(
                     "homeassistant",
-                    service,  # "turn_on" o "turn_off"
-                    {"entity_id": devices_to_control}, # La clave entity_id acepta una lista
+                    service,
+                    {"entity_id": devices_to_control},
                     blocking=False,
                 )
             else:
