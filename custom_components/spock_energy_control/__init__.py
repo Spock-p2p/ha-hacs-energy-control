@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
 
 # Importa las constantes del componente
 from .const import DOMAIN
@@ -43,24 +44,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     config_data = {**entry.data, **entry.options}
     coordinator = EnergyControlCoordinator(hass, config_data)
 
-    # Almacena el coordinador en hass.data
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    # Estructura por entry_id para poder cancelar el ticker al desinstalar
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        "coordinator": coordinator,
+        "unsub": None,
+    }
 
-    # Registra el "listener" para la reconfiguración
+    # Listener para cambios de opciones
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # 🔥 ARRANCA el coordinador (primera actualización) y programa el ciclo
-    # Pequeña espera para dar tiempo a que HA termine de levantar otras integraciones.
+    # Primer fetch (da tiempo a que acaben otros inits)
     await asyncio.sleep(2)
     await coordinator.async_config_entry_first_refresh()
-    _LOGGER.info("Energy Control iniciado: primer fetch realizado y ciclo programado.")
+    _LOGGER.info("Energy Control iniciado: primer fetch realizado.")
+
+    # Ticker manual (porque no hay entidades que escuchen al coordinator)
+    interval = coordinator.update_interval or timedelta(seconds=60)
+
+    async def _tick(_now):
+        _LOGGER.debug("Energy Control tick → solicitando refresh…")
+        await coordinator.async_request_refresh()
+
+    unsub = async_track_time_interval(hass, _tick, interval)
+    hass.data[DOMAIN][entry.entry_id]["unsub"] = unsub
+    _LOGGER.info("Ciclo programado cada %s.", interval)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    hass.data[DOMAIN].pop(entry.entry_id, None)
+    entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    if entry_data and entry_data.get("unsub"):
+        entry_data["unsub"]()  # cancelar el ticker
     return True
 
 
@@ -69,7 +85,7 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def __init__(self, hass: HomeAssistant, config: dict):
         """Initialize the coordinator."""
-        # 1) Propiedades primero
+        # Propiedades
         self.config = config
         self.api_token: str = config[CONF_API_TOKEN]
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
@@ -82,7 +98,7 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.yellow_devices,
         )
 
-        # 2) Intervalo
+        # Intervalo
         scan_interval_seconds = 60
         try:
             scan_interval_seconds = int(config.get(CONF_SCAN_INTERVAL, 60))
@@ -102,12 +118,11 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             scan_interval_seconds,
         )
 
-        # 3) Inicializa DataUpdateCoordinator (esto programa el ciclo; el primer fetch lo dispara async_config_entry_first_refresh)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=update_interval,
+            update_interval=update_interval,  # lo reutilizamos para el ticker
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -135,7 +150,6 @@ class EnergyControlCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err
         except UpdateFailed:
-            # Ya registrado arriba; re-lanza para que el coordinador lo procese
             raise
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(f"An unexpected error occurred: {err}") from err
