@@ -11,8 +11,8 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
-# si ya tienes estos imports, mantén los tuyos:
+# Importar la plataforma de sensor
+from .const import DOMAIN, PLATFORMS
 from .config_flow import (
     CONF_API_TOKEN,
     CONF_SCAN_INTERVAL,
@@ -26,6 +26,7 @@ HARDCODED_API_URL = "https://flex.spock.es/api/status"
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle entry reload."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -61,14 +62,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id]["unsub"] = unsub
     _LOGGER.info("Spock Energy Control: ciclo programado cada %s.", interval)
 
+    # --- INICIO DE LA MODIFICACIÓN ---
+    # Cargar la plataforma de sensores (sensor.py)
+    # Asegúrate de tener 'PLATFORMS = ["sensor"]' en tu const.py
+    # Si no, puedes ponerlo directamente:
+    # await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+    
+    # Es mejor si lo defines en const.py. Si no lo tienes, añade esta línea a const.py:
+    # PLATFORMS: list[str] = ["sensor"]
+    
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # --- FIN DE LA MODIFICACIÓN ---
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    
+    # --- INICIO DE LA MODIFICACIÓN ---
+    # Primero, descargar las plataformas (sensor)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    # --- FIN DE LA MODIFICACIÓN ---
+
+    # Luego, limpiar el ticker y los datos
     entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if entry_data and entry_data.get("unsub"):
         entry_data["unsub"]()  # cancelar ticker
-    return True
+    
+    return unload_ok # Devolver el resultado de la descarga
 
 
 class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
