@@ -144,6 +144,29 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fetcher error: {err}") from err
 
     async def _execute_sgready_actions(self, status: dict) -> None:
+
+        # ID de tu interruptor de override
+        override_switch_id = "input_boolean.spock_control_habilitado" 
+        
+        try:
+            # Comprobar el estado del interruptor
+            is_enabled = self.hass.states.is_state(override_switch_id, "on")
+        except Exception:
+            # Si el ayudante no existe, asumimos que está habilitado para no fallar
+            is_enabled = True 
+            _LOGGER.warning(
+                "No se pudo encontrar el ayudante '%s'. Se asumirá control habilitado.",
+                override_switch_id
+            )
+
+        if not is_enabled:
+            _LOGGER.info(
+                "El control de Spock está deshabilitado manualmente por el interruptor '%s'. Omitiendo acciones.",
+                override_switch_id
+            )
+            # No hacer nada más si está deshabilitado
+            return
+        
         groups = {"green": self.green_devices, "yellow": self.yellow_devices}
         
         for group, api_state in status.items():
