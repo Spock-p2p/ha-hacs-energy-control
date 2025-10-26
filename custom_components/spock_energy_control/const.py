@@ -19,3 +19,6 @@ SWITCH_NAME = "Spock Energy Control Active"
 
 #token api
 CONF_API_TOKEN = "api_token"
+
+# const para el sensor
+PLATFORMS: list[str] = ["sensor"]
