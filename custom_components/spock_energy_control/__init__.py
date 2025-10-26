@@ -123,21 +123,82 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _execute_sgready_actions(self, status: dict) -> None:
         groups = {"green": self.green_devices, "yellow": self.yellow_devices}
-        for group, state in status.items():
-            targets = groups.get(group) or []
-            if not targets:
+        
+        for group, api_state in status.items():
+            all_targets = groups.get(group) or []
+            if not all_targets:
                 _LOGGER.debug("Sin dispositivos en grupo %s; se omite.", group)
                 continue
 
-            service = "turn_on" if state == "start" else "turn_off" if state == "stop" else None
-            if not service:
-                _LOGGER.warning("Estado desconocido para %s: %s", group, state)
+            # 1. Determinar el servicio y el estado deseado
+            service_to_call: str | None = None
+            desired_state: str | None = None
+
+            if api_state == "start":
+                service_to_call = "turn_on"
+                desired_state = "on"
+            elif api_state == "stop":
+                service_to_call = "turn_off"
+                desired_state = "off"
+            
+            if not service_to_call or not desired_state:
+                _LOGGER.warning("Estado desconocido para %s: %s", group, api_state)
                 continue
 
-            _LOGGER.info("Acción %s para %s: %s", service, group, targets)
-            await self.hass.services.async_call(
-                "homeassistant",
-                service,
-                {"entity_id": targets},
-                blocking=False,
-            )
+            # 2. Filtrar entidades que realmente necesitan la acción
+            entities_to_action = []
+            for entity_id in all_targets:
+                try:
+                    current_state_obj = self.hass.states.get(entity_id)
+
+                    if not current_state_obj:
+                        _LOGGER.warning(
+                            "No se pudo encontrar el estado de la entidad '%s' (grupo %s). Se omitirá.", 
+                            entity_id,
+                            group
+                        )
+                        continue
+                    
+                    current_state = current_state_obj.state
+                    _LOGGER.debug(
+                        "Entidad %s: API quiere '%s' (estado %s), estado actual es '%s'", 
+                        entity_id, api_state, desired_state, current_state
+                    )
+
+                    # 3. Comparar estado actual con deseado
+                    # Si queremos encender (desired_state="on") y NO está "on" -> actuar
+                    # Si queremos apagar (desired_state="off") y NO está "off" -> actuar
+                    if current_state != desired_state:
+                        entities_to_action.append(entity_id)
+                    else:
+                        _LOGGER.debug(
+                            "Entidad %s ya está en el estado deseado (%s). No se envía acción.", 
+                            entity_id, desired_state
+                        )
+                
+                except Exception as e:
+                    _LOGGER.error("Error al procesar entidad %s: %s", entity_id, e)
+
+
+            # 4. Ejecutar la llamada al servicio SOLO si hay entidades que cambiar
+            if entities_to_action:
+                _LOGGER.info(
+                    "Acción %s (desde API=%s) para %s: %s", 
+                    service_to_call, 
+                    api_state, 
+                    group, 
+                    entities_to_action
+                )
+                await self.hass.services.async_call(
+                    "homeassistant",
+                    service_to_call,
+                    {"entity_id": entities_to_action},
+                    blocking=False,
+                )
+            else:
+                _LOGGER.info(
+                    "Acción %s (desde API=%s) para grupo %s: No se requieren cambios de estado.",
+                    service_to_call,
+                    api_state,
+                    group
+                )
