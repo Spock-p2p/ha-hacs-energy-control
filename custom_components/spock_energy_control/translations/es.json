@@ -6,13 +6,9 @@
         "description": "Introduce toda la información de configuración.",
         "data": {
           "api_token": "API Token (Obligatorio)",
-          
-          "sgready_section": "Dispositivos SGReady",
           "scan_interval": "Intervalo de escaneo de la API (segundos)",
           "green_devices": "Dispositivos 'Green' SGReady",
           "yellow_devices": "Dispositivos 'Yellow' SGReady",
-          
-          "ems_section": "Spock EMS",
           "plant_id": "Identificador de planta (ej: 123445)",
           "ems_token": "Token de acceso EMS"
         }
@@ -31,12 +27,9 @@
       "init": {
         "title": "Opciones de Spock Energy Control",
         "data": {
-          "sgready_section": "Dispositivos SGReady",
           "scan_interval": "Intervalo de escaneo de la API (segundos)",
           "green_devices": "Dispositivos 'Green' SGReady",
           "yellow_devices": "Dispositivos 'Yellow' SGReady",
-          
-          "ems_section": "Spock EMS",
           "plant_id": "Identificador de planta (ej: 123445)",
           "ems_token": "Token de acceso EMS"
         }
