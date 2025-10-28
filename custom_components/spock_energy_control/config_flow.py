@@ -10,26 +10,26 @@ from homeassistant.core import callback
 from homeassistant.config_entries import ConfigFlow, ConfigEntry, OptionsFlow
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectOption,
     EntitySelector,
     EntitySelectorConfig,
 )
-from homeassistant.const import CONF_API_TOKEN, CONF_SCAN_INTERVAL
 
-# --- INICIO DE LA MODIFICACIÓN ---
-# Importar las nuevas constantes desde const.py
-from .const import DOMAIN, CONF_PLANT_ID, CONF_EMS_TOKEN
-# --- FIN DE LA MODIFICACIÓN ---
-
+# --- INICIO DE LA MODIFICACION ---
+# Importar TODAS las constantes necesarias desde const.py
+from .const import (
+    DOMAIN,
+    CONF_API_TOKEN,
+    CONF_SCAN_INTERVAL,
+    CONF_GREEN_DEVICES,
+    CONF_YELLOW_DEVICES,
+    CONF_PLANT_ID,
+    CONF_EMS_TOKEN,
+)
+# --- FIN DE LA MODIFICACION ---
 
 _LOGGER = logging.getLogger(__name__)
 
-# Constants defined in config_flow.py (following existing pattern)
-CONF_GREEN_DEVICES = "green_devices"
-CONF_YELLOW_DEVICES = "yellow_devices"
-
+# --- ELIMINADAS DEFINICIONES LOCALES DE CONSTANTES ---
 
 class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Spock Energy Control."""
@@ -40,11 +40,7 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            # Aquí deberías añadir la validación del API Token
-            # Por ahora, simplemente lo aceptamos.
-            # (En el futuro, aquí podrías llamar a la API con el token
-            # y si devuelve 403, mostrar errors["base"] = "invalid_auth")
-            
+            # (Aqui puedes añadir validacion de API)
             await self.async_set_unique_id(user_input[CONF_API_TOKEN])
             self._abort_if_unique_id_configured()
 
@@ -53,7 +49,6 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
                 data=user_input
             )
 
-        # Esquema para el paso inicial (solo API Token)
         schema = vol.Schema({
             vol.Required(CONF_API_TOKEN): str,
         })
@@ -81,22 +76,16 @@ class OptionsFlowHandler(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            # Guardar las opciones (incluyendo las nuevas de EMS)
             return self.async_create_entry(title="", data=user_input)
 
-        # --- INICIO DE LA MODIFICACIÓN ---
-        # Cargar los valores actuales (o los defaults)
         options = self.config_entry.options
         
         green_devices = options.get(CONF_GREEN_DEVICES, [])
         yellow_devices = options.get(CONF_YELLOW_DEVICES, [])
         scan_interval = options.get(CONF_SCAN_INTERVAL, 60)
-        
-        # Cargar los nuevos valores opcionales de EMS
         plant_id = options.get(CONF_PLANT_ID, "")
         ems_token = options.get(CONF_EMS_TOKEN, "")
 
-        # Definir el esquema para el formulario de opciones
         options_schema = vol.Schema({
             # --- SECCIÓN SGReady (existente) ---
             vol.Optional(CONF_SCAN_INTERVAL, default=scan_interval):
@@ -109,10 +98,8 @@ class OptionsFlowHandler(OptionsFlow):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
                 
             # --- SECCIÓN Spock EMS (nueva) ---
-            # Esto crea un título de sección
             vol.Marker("ems_section"): str, 
             
-            # Nuevos campos opcionales
             vol.Optional(CONF_PLANT_ID, description={"suggested_value": plant_id}): 
                 str,
             
@@ -124,4 +111,3 @@ class OptionsFlowHandler(OptionsFlow):
             step_id="init",
             data_schema=options_schema
         )
-        # --- FIN DE LA MODIFICACIÓN ---
