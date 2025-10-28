@@ -11,8 +11,8 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# --- INICIO DE LA MODIFICACION ---
-# Importar TODO desde const.py, rompiendo el bucle con config_flow.py
+# --- IMPORTACIÓN CORREGIDA ---
+# Importar TODO solo desde const.py
 from .const import (
     DOMAIN,
     PLATFORMS,
@@ -22,16 +22,12 @@ from .const import (
     CONF_YELLOW_DEVICES,
     CONF_PLANT_ID,
     CONF_EMS_TOKEN,
-    ENDPOINT_URL, # Usamos la constante del endpoint
+    ENDPOINT_URL, 
 )
-# --- FIN DE LA MODIFICACION ---
+# --- FIN DE LA CORRECCIÓN ---
 
 
 _LOGGER = logging.getLogger(__name__)
-
-# --- ELIMINADA LA CONSTANTE HARDCODED ---
-# (ya que esta en const.py)
-# HARDCODED_API_URL = "https://flex.spock.es/api/status" 
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -40,7 +36,12 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Spock Energy Control."""
+    
+    # --- LÓGICA DE FUSIÓN CRÍTICA ---
+    # Combina los datos de la instalacion (data)
+    # con las opciones (options), dando prioridad a las opciones.
     cfg = {**entry.data, **entry.options}
+    
     coordinator = SpockEnergyCoordinator(hass, cfg)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -51,7 +52,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await asyncio.sleep(2)
-    await coordinator.async_config_entry_first_refresh()
+    # Aquí es donde falla si el token es incorrecto
+    await coordinator.async_config_entry_first_refresh() 
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
 
     interval = coordinator.update_interval or timedelta(seconds=60)
@@ -67,7 +69,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id]["unsub"] = unsub
     _LOGGER.info("Spock Energy Control: ciclo programado cada %s.", interval)
 
-    # Cargar la plataforma de sensores (sensor.py)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     return True
@@ -89,8 +90,13 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator que consulta el endpoint y ejecuta acciones SGReady."""
 
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
+        """Initialize the coordinator."""
         self.config = config
+        
+        # --- LECTURA DEL TOKEN ---
         self.api_token: str = config[CONF_API_TOKEN]
+        
+        # Leemos el resto de la configuracion
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         self.plant_id: str | None = config.get(CONF_PLANT_ID)
@@ -111,6 +117,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch data from API endpoint."""
         _LOGGER.debug("Fetching API data from %s", ENDPOINT_URL)
         try:
             headers = {"X-Auth-Token": self.api_token}
@@ -129,7 +136,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             await self._execute_sgready_actions(data)
 
-            # Aqui puedes añadir la logica del EMS
             if self.plant_id and self.ems_token:
                 _LOGGER.debug("Datos EMS presentes, llamando a la logica de bateria...")
                 # await self._execute_ems_actions(self.plant_id, self.ems_token)
@@ -142,6 +148,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fetcher error: {err}") from err
 
     async def _execute_sgready_actions(self, status: dict) -> None:
+        """Execute SGReady actions based on API status."""
         groups = {"green": self.green_devices, "yellow": self.yellow_devices}
         
         for group, api_state in status.items():
