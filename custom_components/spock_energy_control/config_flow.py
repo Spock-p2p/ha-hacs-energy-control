@@ -44,8 +44,6 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
                 data=user_input
             )
 
-        # --- INICIO DE LA MODIFICACIÓN ---
-        # Schema sin los vol.Marker
         schema = vol.Schema({
             vol.Required(CONF_API_TOKEN): str,
             
@@ -64,7 +62,6 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_EMS_TOKEN, default=""): 
                 str,
         })
-        # --- FIN DE LA MODIFICACIÓN ---
 
         return self.async_show_form(
             step_id="user", 
@@ -94,8 +91,11 @@ class OptionsFlowHandler(OptionsFlow):
         config = {**self.config_entry.data, **self.config_entry.options}
 
         # --- INICIO DE LA MODIFICACIÓN ---
-        # Schema de opciones sin los vol.Marker
+        # Ahora el schema de opciones tambien incluye el API_TOKEN
         options_schema = vol.Schema({
+            vol.Required(CONF_API_TOKEN, default=config.get(CONF_API_TOKEN, "")):
+                str,
+
             vol.Optional(CONF_SCAN_INTERVAL, default=config.get(CONF_SCAN_INTERVAL, 60)):
                 vol.All(vol.Coerce(int), vol.Range(min=10)),
             
