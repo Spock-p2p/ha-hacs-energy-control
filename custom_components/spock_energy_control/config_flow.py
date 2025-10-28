@@ -14,7 +14,6 @@ from homeassistant.helpers.selector import (
     EntitySelectorConfig,
 )
 
-# Importar TODAS las constantes necesarias desde const.py
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
@@ -26,6 +25,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Spock Energy Control."""
@@ -40,14 +40,39 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(user_input[CONF_API_TOKEN])
             self._abort_if_unique_id_configured()
 
+            # Guardamos todo en entry.data
             return self.async_create_entry(
                 title="Spock Energy Control", 
                 data=user_input
             )
 
+        # --- INICIO DE LA MODIFICACIÓN ---
+        # Ahora el schema inicial pide TODO
         schema = vol.Schema({
             vol.Required(CONF_API_TOKEN): str,
+            
+            # --- SECCIÓN 1: SGReady ---
+            vol.Marker("sgready_section"): str, 
+            
+            vol.Optional(CONF_SCAN_INTERVAL, default=60):
+                vol.All(vol.Coerce(int), vol.Range(min=10)),
+            
+            vol.Optional(CONF_GREEN_DEVICES, default=[]):
+                EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
+            
+            vol.Optional(CONF_YELLOW_DEVICES, default=[]):
+                EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
+                
+            # --- SECCIÓN 2: Spock EMS ---
+            vol.Marker("ems_section"): str, 
+            
+            vol.Optional(CONF_PLANT_ID, default=""): 
+                str,
+            
+            vol.Optional(CONF_EMS_TOKEN, default=""): 
+                str,
         })
+        # --- FIN DE LA MODIFICACIÓN ---
 
         return self.async_show_form(
             step_id="user", 
@@ -72,39 +97,40 @@ class OptionsFlowHandler(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
+            # Al guardar, se guarda en entry.options
             return self.async_create_entry(title="", data=user_input)
 
-        options = self.config_entry.options
+        # --- INICIO DE LA MODIFICACIÓN ---
+        # El OptionsFlow ahora lee la configuracion actual 
+        # (sea de .data o de .options) y la muestra para editar.
         
-        green_devices = options.get(CONF_GREEN_DEVICES, [])
-        yellow_devices = options.get(CONF_YELLOW_DEVICES, [])
-        scan_interval = options.get(CONF_SCAN_INTERVAL, 60)
-        plant_id = options.get(CONF_PLANT_ID, "")
-        ems_token = options.get(CONF_EMS_TOKEN, "")
+        # El API Token no se puede editar, asi que no lo incluimos
+        
+        config = {**self.config_entry.data, **self.config_entry.options}
 
-        # Añadido vol.Marker("sgready_section") al inicio
-        
         options_schema = vol.Schema({
-            
+            # --- SECCIÓN 1: SGReady ---
             vol.Marker("sgready_section"): str, 
             
-            vol.Optional(CONF_SCAN_INTERVAL, default=scan_interval):
+            vol.Optional(CONF_SCAN_INTERVAL, default=config.get(CONF_SCAN_INTERVAL, 60)):
                 vol.All(vol.Coerce(int), vol.Range(min=10)),
             
-            vol.Optional(CONF_GREEN_DEVICES, default=green_devices):
+            vol.Optional(CONF_GREEN_DEVICES, default=config.get(CONF_GREEN_DEVICES, [])):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
             
-            vol.Optional(CONF_YELLOW_DEVICES, default=yellow_devices):
+            vol.Optional(CONF_YELLOW_DEVICES, default=config.get(CONF_YELLOW_DEVICES, [])):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
                 
+            # --- SECCIÓN 2: Spock EMS ---
             vol.Marker("ems_section"): str, 
             
-            vol.Optional(CONF_PLANT_ID, description={"suggested_value": plant_id}): 
+            vol.Optional(CONF_PLANT_ID, description={"suggested_value": config.get(CONF_PLANT_ID, "")}): 
                 str,
             
-            vol.Optional(CONF_EMS_TOKEN, description={"suggested_value": ems_token}): 
+            vol.Optional(CONF_EMS_TOKEN, description={"suggested_value": config.get(CONF_EMS_TOKEN, "")}): 
                 str,
         })
+        # --- FIN DE LA MODIFICACIÓN ---
 
         return self.async_show_form(
             step_id="init",
