@@ -1,3 +1,5 @@
+"""Constants for the Spock Energy Control integration."""
+
 DOMAIN = "spock_energy_control"
 
 CONF_ENTITIES = "entities"
@@ -17,11 +19,13 @@ DATA_UNSUB = "unsub"
 SWITCH_UNIQUE_ID = "spock_energy_control_active"
 SWITCH_NAME = "Spock Energy Control Active"
 
-#token api
+# --- Constantes de Configuracion ---
 CONF_API_TOKEN = "api_token"
+CONF_SCAN_INTERVAL = "scan_interval"
+CONF_GREEN_DEVICES = "green_devices"
+CONF_YELLOW_DEVICES = "yellow_devices"
+CONF_PLANT_ID = "plant_id"
+CONF_EMS_TOKEN = "ems_token"
 
 # const para el sensor
 PLATFORMS: list[str] = ["sensor"]
-
-CONF_PLANT_ID = "plant_id"
-CONF_EMS_TOKEN = "ems_token"
