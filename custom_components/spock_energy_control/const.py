@@ -20,7 +20,7 @@ SWITCH_UNIQUE_ID = "spock_energy_control_active"
 SWITCH_NAME = "Spock Energy Control Active"
 
 # --- Constantes de Configuracion ---
-CONF_API_TOKEN = "api_token"
+CONF_API_TOKEN = "api_token"  # <--- Asegurarse de que esta aqui
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_GREEN_DEVICES = "green_devices"
 CONF_YELLOW_DEVICES = "yellow_devices"
