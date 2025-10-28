@@ -2,21 +2,34 @@
   "config": {
     "step": {
       "user": {
+        "title": "Configuración de Spock Energy Control",
+        "description": "Por favor, introduce tu API Token de Spock.",
         "data": {
-          "api_url": "URL de la API (ej: flex.spock.es/api/status)",
-          "scan_interval": "Intervalo de escaneo (segundos)",
-          "green_devices": "Dispositivos Verdes (Prioridad 1)",
-          "yellow_devices": "Dispositivos Amarillos (Prioridad 2)"
-        },
-        "description": "Configura la URL de la API, el intervalo de escaneo y los dispositivos para los grupos SGReady Verde y Amarillo. Los dispositivos no pueden estar en ambos grupos.",
-        "title": "Configuración de Control de Energía"
+          "api_token": "API Token"
+        }
       }
     },
     "error": {
-      "exclusive_devices": "Los dispositivos no pueden ser seleccionados tanto en la lista Verde como en la Amarilla. Por favor, asegúrate de que ninguna entidad esté duplicada."
+      "invalid_auth": "El API Token no es válido. Por favor, compruébalo y vuelve a intentarlo.",
+      "cannot_connect": "No se puede conectar con la API de Spock."
     },
     "abort": {
-      "already_configured": "La integración ya está configurada."
+      "already_configured": "Este API Token ya está configurado."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Spock Energy Control",
+        "data": {
+          "scan_interval": "Intervalo de escaneo de la API (segundos)",
+          "green_devices": "Dispositivos 'Green' SGReady (Modo 3: Operación Recomendada)",
+          "yellow_devices": "Dispositivos 'Yellow' SGReady (Modo 4: Operación Alta Energía)",
+          "ems_section": "Spock EMS (Opcional)",
+          "plant_id": "Identificador de planta (ej: 123445)",
+          "ems_token": "Token de acceso EMS"
+        }
+      }
     }
   }
 }
