@@ -24,8 +24,8 @@
         "data": {                    
           "sgready_section": "Dispositivos SGReady",
           "scan_interval": "Intervalo de escaneo de la API (segundos)",
-          "green_devices": "Dispositivos 'Green' SGReady (Modo 3: Operación Recomendada)",
-          "yellow_devices": "Dispositivos 'Yellow' SGReady (Modo 4: Operación Alta Energía)",          
+          "green_devices": "Dispositivos 'Green'",
+          "yellow_devices": "Dispositivos 'Yellow'",          
           "ems_section": "Spock EMS",
           "plant_id": "Identificador de planta (ej: 123445)",
           "ems_token": "Token de acceso EMS"
