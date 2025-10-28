@@ -22,3 +22,6 @@ CONF_API_TOKEN = "api_token"
 
 # const para el sensor
 PLATFORMS: list[str] = ["sensor"]
+
+CONF_PLANT_ID = "plant_id"
+CONF_EMS_TOKEN = "ems_token"
