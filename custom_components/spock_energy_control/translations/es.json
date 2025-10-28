@@ -3,14 +3,23 @@
     "step": {
       "user": {
         "title": "Configuración de Spock Energy Control",
-        "description": "Por favor, introduce tu API Token de Spock.",
+        "description": "Introduce toda la información de configuración.",
         "data": {
-          "api_token": "API Token"
+          "api_token": "API Token (Obligatorio)",
+          
+          "sgready_section": "Dispositivos SGReady",
+          "scan_interval": "Intervalo de escaneo de la API (segundos)",
+          "green_devices": "Dispositivos 'Green' SGReady",
+          "yellow_devices": "Dispositivos 'Yellow' SGReady",
+          
+          "ems_section": "Spock EMS",
+          "plant_id": "Identificador de planta (ej: 123445)",
+          "ems_token": "Token de acceso EMS"
         }
       }
     },
     "error": {
-      "invalid_auth": "El API Token no es válido. Por favor, compruébalo y vuelve a intentarlo.",
+      "invalid_auth": "El API Token no es válido.",
       "cannot_connect": "No se puede conectar con la API de Spock."
     },
     "abort": {
@@ -24,8 +33,9 @@
         "data": {
           "sgready_section": "Dispositivos SGReady",
           "scan_interval": "Intervalo de escaneo de la API (segundos)",
-          "green_devices": "Dispositivos 'Green' SGReady (Modo 3: Operación Recomendada)",
-          "yellow_devices": "Dispositivos 'Yellow' SGReady (Modo 4: Operación Alta Energía)",
+          "green_devices": "Dispositivos 'Green' SGReady",
+          "yellow_devices": "Dispositivos 'Yellow' SGReady",
+          
           "ems_section": "Spock EMS",
           "plant_id": "Identificador de planta (ej: 123445)",
           "ems_token": "Token de acceso EMS"
