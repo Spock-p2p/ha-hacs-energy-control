@@ -36,23 +36,18 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            # (Aqui puedes añadir validacion de API)
             await self.async_set_unique_id(user_input[CONF_API_TOKEN])
             self._abort_if_unique_id_configured()
 
-            # Guardamos todo en entry.data
             return self.async_create_entry(
                 title="Spock Energy Control", 
                 data=user_input
             )
 
         # --- INICIO DE LA MODIFICACIÓN ---
-        # Ahora el schema inicial pide TODO
+        # Schema sin los vol.Marker
         schema = vol.Schema({
             vol.Required(CONF_API_TOKEN): str,
-            
-            # --- SECCIÓN 1: SGReady ---
-            vol.Marker("sgready_section"): str, 
             
             vol.Optional(CONF_SCAN_INTERVAL, default=60):
                 vol.All(vol.Coerce(int), vol.Range(min=10)),
@@ -63,9 +58,6 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_YELLOW_DEVICES, default=[]):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
                 
-            # --- SECCIÓN 2: Spock EMS ---
-            vol.Marker("ems_section"): str, 
-            
             vol.Optional(CONF_PLANT_ID, default=""): 
                 str,
             
@@ -97,21 +89,13 @@ class OptionsFlowHandler(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            # Al guardar, se guarda en entry.options
             return self.async_create_entry(title="", data=user_input)
 
-        # --- INICIO DE LA MODIFICACIÓN ---
-        # El OptionsFlow ahora lee la configuracion actual 
-        # (sea de .data o de .options) y la muestra para editar.
-        
-        # El API Token no se puede editar, asi que no lo incluimos
-        
         config = {**self.config_entry.data, **self.config_entry.options}
 
+        # --- INICIO DE LA MODIFICACIÓN ---
+        # Schema de opciones sin los vol.Marker
         options_schema = vol.Schema({
-            # --- SECCIÓN 1: SGReady ---
-            vol.Marker("sgready_section"): str, 
-            
             vol.Optional(CONF_SCAN_INTERVAL, default=config.get(CONF_SCAN_INTERVAL, 60)):
                 vol.All(vol.Coerce(int), vol.Range(min=10)),
             
@@ -121,9 +105,6 @@ class OptionsFlowHandler(OptionsFlow):
             vol.Optional(CONF_YELLOW_DEVICES, default=config.get(CONF_YELLOW_DEVICES, [])):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
                 
-            # --- SECCIÓN 2: Spock EMS ---
-            vol.Marker("ems_section"): str, 
-            
             vol.Optional(CONF_PLANT_ID, description={"suggested_value": config.get(CONF_PLANT_ID, "")}): 
                 str,
             
