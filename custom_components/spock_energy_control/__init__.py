@@ -11,8 +11,6 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# --- IMPORTACIÓN CORREGIDA ---
-# Importar TODO solo desde const.py
 from .const import (
     DOMAIN,
     PLATFORMS,
@@ -24,8 +22,6 @@ from .const import (
     CONF_EMS_TOKEN,
     ENDPOINT_URL, 
 )
-# --- FIN DE LA CORRECCIÓN ---
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,9 +33,6 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Spock Energy Control."""
     
-    # --- LÓGICA DE FUSIÓN CRÍTICA ---
-    # Combina los datos de la instalacion (data)
-    # con las opciones (options), dando prioridad a las opciones.
     cfg = {**entry.data, **entry.options}
     
     coordinator = SpockEnergyCoordinator(hass, cfg)
@@ -52,7 +45,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await asyncio.sleep(2)
-    # Aquí es donde falla si el token es incorrecto
     await coordinator.async_config_entry_first_refresh() 
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
 
@@ -89,18 +81,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator que consulta el endpoint y ejecuta acciones SGReady."""
 
+    # --- INICIO DE LA MODIFICACIÓN (FIX PARA EL ERROR 431) ---
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
         """Initialize the coordinator."""
-        self.config = config
         
-        # --- LECTURA DEL TOKEN ---
+        # No guardamos 'self.config = config'
+        # En su lugar, extraemos solo lo que necesitamos.
+        # Esto evita que el diccionario 'config' (con listas de entidades)
+        # se filtre accidentalmente en las cabeceras de la sesion.
+        
         self.api_token: str = config[CONF_API_TOKEN]
-        
-        # Leemos el resto de la configuracion
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         self.plant_id: str | None = config.get(CONF_PLANT_ID)
         self.ems_token: str | None = config.get(CONF_EMS_TOKEN)
+        
+        # Obtenemos la sesion compartida de HA
         self._session = async_get_clientsession(hass)
 
         seconds = 60
@@ -115,12 +111,20 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=DOMAIN,
             update_interval=timedelta(seconds=seconds),
         )
+    # --- FIN DE LA MODIFICACIÓN ---
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API endpoint."""
+        
+        # --- INICIO DE LA MODIFICACIÓN (FIX PARA EL ERROR 431) ---
+        # Creamos el diccionario de cabeceras. Solo incluira el token.
+        headers = {"X-Auth-Token": self.api_token}
         _LOGGER.debug("Fetching API data from %s", ENDPOINT_URL)
+        
         try:
-            headers = {"X-Auth-Token": self.api_token}
+            # Pasamos 'headers=headers' explicitamente.
+            # La sesion compartida '_session' NO debe tener
+            # cabeceras personalizadas por defecto.
             async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
                 if resp.status == 403:
                     raise UpdateFailed("API Token inválido (403)")
@@ -130,6 +134,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     raise UpdateFailed(f"HTTP {resp.status}")
 
                 data = await resp.json(content_type=None)
+            # --- FIN DE LA MODIFICACIÓN ---
 
             if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                 raise UpdateFailed(f"Formato de respuesta inesperado: {data}")
