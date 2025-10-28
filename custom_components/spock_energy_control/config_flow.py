@@ -14,7 +14,6 @@ from homeassistant.helpers.selector import (
     EntitySelectorConfig,
 )
 
-# --- INICIO DE LA MODIFICACION ---
 # Importar TODAS las constantes necesarias desde const.py
 from .const import (
     DOMAIN,
@@ -25,11 +24,8 @@ from .const import (
     CONF_PLANT_ID,
     CONF_EMS_TOKEN,
 )
-# --- FIN DE LA MODIFICACION ---
 
 _LOGGER = logging.getLogger(__name__)
-
-# --- ELIMINADAS DEFINICIONES LOCALES DE CONSTANTES ---
 
 class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Spock Energy Control."""
@@ -86,8 +82,12 @@ class OptionsFlowHandler(OptionsFlow):
         plant_id = options.get(CONF_PLANT_ID, "")
         ems_token = options.get(CONF_EMS_TOKEN, "")
 
+        # Añadido vol.Marker("sgready_section") al inicio
+        
         options_schema = vol.Schema({
-            # --- SECCIÓN SGReady (existente) ---
+            
+            vol.Marker("sgready_section"): str, 
+            
             vol.Optional(CONF_SCAN_INTERVAL, default=scan_interval):
                 vol.All(vol.Coerce(int), vol.Range(min=10)),
             
@@ -97,7 +97,6 @@ class OptionsFlowHandler(OptionsFlow):
             vol.Optional(CONF_YELLOW_DEVICES, default=yellow_devices):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
                 
-            # --- SECCIÓN Spock EMS (nueva) ---
             vol.Marker("ems_section"): str, 
             
             vol.Optional(CONF_PLANT_ID, description={"suggested_value": plant_id}): 
