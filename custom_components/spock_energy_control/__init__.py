@@ -11,22 +11,30 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# Importar la plataforma de sensor
-from .const import DOMAIN, PLATFORMS
-from .config_flow import (
+# --- INICIO DE LA MODIFICACION ---
+# Importar TODO desde const.py, rompiendo el bucle con config_flow.py
+from .const import (
+    DOMAIN,
+    PLATFORMS,
     CONF_API_TOKEN,
     CONF_SCAN_INTERVAL,
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
+    CONF_PLANT_ID,
+    CONF_EMS_TOKEN,
+    ENDPOINT_URL, # Usamos la constante del endpoint
 )
+# --- FIN DE LA MODIFICACION ---
+
 
 _LOGGER = logging.getLogger(__name__)
 
-HARDCODED_API_URL = "https://flex.spock.es/api/status"
+# --- ELIMINADA LA CONSTANTE HARDCODED ---
+# (ya que esta en const.py)
+# HARDCODED_API_URL = "https://flex.spock.es/api/status" 
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle entry reload."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -35,16 +43,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     cfg = {**entry.data, **entry.options}
     coordinator = SpockEnergyCoordinator(hass, cfg)
 
-    # Estructura por entry_id (guardamos también el unsub del ticker)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
         "unsub": None,
     }
 
-    # Reactivar al cambiar opciones
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # Primer fetch y programación del ciclo
     await asyncio.sleep(2)
     await coordinator.async_config_entry_first_refresh()
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
@@ -62,35 +67,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id]["unsub"] = unsub
     _LOGGER.info("Spock Energy Control: ciclo programado cada %s.", interval)
 
-    # --- INICIO DE LA MODIFICACIÓN ---
     # Cargar la plataforma de sensores (sensor.py)
-    # Asegúrate de tener 'PLATFORMS = ["sensor"]' en tu const.py
-    # Si no, puedes ponerlo directamente:
-    # await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
-    
-    # Es mejor si lo defines en const.py. Si no lo tienes, añade esta línea a const.py:
-    # PLATFORMS: list[str] = ["sensor"]
-    
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    # --- FIN DE LA MODIFICACIÓN ---
-
+    
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     
-    # --- INICIO DE LA MODIFICACIÓN ---
-    # Primero, descargar las plataformas (sensor)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    # --- FIN DE LA MODIFICACIÓN ---
 
-    # Luego, limpiar el ticker y los datos
     entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if entry_data and entry_data.get("unsub"):
-        entry_data["unsub"]()  # cancelar ticker
+        entry_data["unsub"]()
     
-    return unload_ok # Devolver el resultado de la descarga
+    return unload_ok
 
 
 class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -101,9 +93,10 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.api_token: str = config[CONF_API_TOKEN]
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
+        self.plant_id: str | None = config.get(CONF_PLANT_ID)
+        self.ems_token: str | None = config.get(CONF_EMS_TOKEN)
         self._session = async_get_clientsession(hass)
 
-        # Intervalo desde opciones (mínimo 10s)
         seconds = 60
         try:
             seconds = max(10, int(config.get(CONF_SCAN_INTERVAL, 60)))
@@ -118,10 +111,10 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        _LOGGER.debug("Fetching API data from %s", HARDCODED_API_URL)
+        _LOGGER.debug("Fetching API data from %s", ENDPOINT_URL)
         try:
             headers = {"X-Auth-Token": self.api_token}
-            async with self._session.get(HARDCODED_API_URL, headers=headers) as resp:
+            async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
                 if resp.status == 403:
                     raise UpdateFailed("API Token inválido (403)")
                 if resp.status != 200:
@@ -131,11 +124,16 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 data = await resp.json(content_type=None)
 
-            # Validación mínima
             if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                 raise UpdateFailed(f"Formato de respuesta inesperado: {data}")
 
             await self._execute_sgready_actions(data)
+
+            # Aqui puedes añadir la logica del EMS
+            if self.plant_id and self.ems_token:
+                _LOGGER.debug("Datos EMS presentes, llamando a la logica de bateria...")
+                # await self._execute_ems_actions(self.plant_id, self.ems_token)
+            
             return data
 
         except UpdateFailed:
@@ -144,29 +142,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fetcher error: {err}") from err
 
     async def _execute_sgready_actions(self, status: dict) -> None:
-
-        # ID de tu interruptor de override
-        override_switch_id = "input_boolean.spock_control_habilitado" 
-        
-        try:
-            # Comprobar el estado del interruptor
-            is_enabled = self.hass.states.is_state(override_switch_id, "on")
-        except Exception:
-            # Si el ayudante no existe, asumimos que está habilitado para no fallar
-            is_enabled = True 
-            _LOGGER.warning(
-                "No se pudo encontrar el ayudante '%s'. Se asumirá control habilitado.",
-                override_switch_id
-            )
-
-        if not is_enabled:
-            _LOGGER.info(
-                "El control de Spock está deshabilitado manualmente por el interruptor '%s'. Omitiendo acciones.",
-                override_switch_id
-            )
-            # No hacer nada más si está deshabilitado
-            return
-        
         groups = {"green": self.green_devices, "yellow": self.yellow_devices}
         
         for group, api_state in status.items():
@@ -175,7 +150,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Sin dispositivos en grupo %s; se omite.", group)
                 continue
 
-            # 1. Determinar el servicio y el estado deseado
             service_to_call: str | None = None
             desired_state: str | None = None
 
@@ -190,7 +164,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.warning("Estado desconocido para %s: %s", group, api_state)
                 continue
 
-            # 2. Filtrar entidades que realmente necesitan la acción
             entities_to_action = []
             for entity_id in all_targets:
                 try:
@@ -210,9 +183,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         entity_id, api_state, desired_state, current_state
                     )
 
-                    # 3. Comparar estado actual con deseado
-                    # Si queremos encender (desired_state="on") y NO está "on" -> actuar
-                    # Si queremos apagar (desired_state="off") y NO está "off" -> actuar
                     if current_state != desired_state:
                         entities_to_action.append(entity_id)
                     else:
@@ -224,8 +194,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 except Exception as e:
                     _LOGGER.error("Error al procesar entidad %s: %s", entity_id, e)
 
-
-            # 4. Ejecutar la llamada al servicio SOLO si hay entidades que cambiar
             if entities_to_action:
                 _LOGGER.info(
                     "Acción %s (desde API=%s) para %s: %s", 
