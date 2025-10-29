@@ -6,7 +6,6 @@
         "description": "Introduce toda la información de configuración.",
         "data": {
           "api_token": "API Token (Obligatorio)",
-          "scan_interval": "Intervalo de escaneo de la API (segundos)",
           "green_devices": "Dispositivos 'Green' SGReady",
           "yellow_devices": "Dispositivos 'Yellow' SGReady",
           "plant_id": "Identificador de planta (ej: 123445)",
@@ -27,7 +26,7 @@
       "init": {
         "title": "Opciones de Spock Energy Control",
         "data": {
-          "scan_interval": "Intervalo de escaneo de la API (segundos)",
+          "api_token": "API Token (Obligatorio)",
           "green_devices": "Dispositivos 'Green' SGReady",
           "yellow_devices": "Dispositivos 'Yellow' SGReady",
           "plant_id": "Identificador de planta (ej: 123445)",
