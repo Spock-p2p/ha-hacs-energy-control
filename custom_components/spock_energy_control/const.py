@@ -5,7 +5,7 @@ DOMAIN = "spock_energy_control"
 CONF_ENTITIES = "entities"
 
 # Polling
-UPDATE_INTERVAL_SECONDS = 15
+UPDATE_INTERVAL_SECONDS = 60
 
 # Endpoint fijo (no configurable)
 ENDPOINT_URL = "https://flex.spock.es/api/status"
@@ -20,8 +20,8 @@ SWITCH_UNIQUE_ID = "spock_energy_control_active"
 SWITCH_NAME = "Spock Energy Control Active"
 
 # --- Constantes de Configuracion ---
-CONF_API_TOKEN = "api_token"  # <--- Asegurarse de que esta aqui
-CONF_SCAN_INTERVAL = "scan_interval"
+CONF_API_TOKEN = "api_token"
+# CONF_SCAN_INTERVAL = "scan_interval"  <--- ELIMINADO
 CONF_GREEN_DEVICES = "green_devices"
 CONF_YELLOW_DEVICES = "yellow_devices"
 CONF_PLANT_ID = "plant_id"
