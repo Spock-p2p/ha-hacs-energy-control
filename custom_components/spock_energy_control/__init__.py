@@ -11,16 +11,17 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+# Imports centralizados desde const.py
 from .const import (
     DOMAIN,
     PLATFORMS,
     CONF_API_TOKEN,
-    CONF_SCAN_INTERVAL,
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
     CONF_PLANT_ID,
     CONF_EMS_TOKEN,
     ENDPOINT_URL, 
+    UPDATE_INTERVAL_SECONDS, # Usamos el intervalo fijo
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,7 +49,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh() 
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
 
-    interval = coordinator.update_interval or timedelta(seconds=60)
+    # Lee el intervalo (60s) directamente del coordinador
+    interval = coordinator.update_interval
 
     async def _tick(_now):
         try:
@@ -81,14 +83,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator que consulta el endpoint y ejecuta acciones SGReady."""
 
-    # --- INICIO DE LA MODIFICACIÓN (FIX PARA EL ERROR 431) ---
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
         """Initialize the coordinator."""
-        
-        # No guardamos 'self.config = config'
-        # En su lugar, extraemos solo lo que necesitamos.
-        # Esto evita que el diccionario 'config' (con listas de entidades)
-        # se filtre accidentalmente en las cabeceras de la sesion.
         
         self.api_token: str = config[CONF_API_TOKEN]
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
@@ -96,14 +92,10 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.plant_id: str | None = config.get(CONF_PLANT_ID)
         self.ems_token: str | None = config.get(CONF_EMS_TOKEN)
         
-        # Obtenemos la sesion compartida de HA
         self._session = async_get_clientsession(hass)
 
-        seconds = 60
-        try:
-            seconds = max(10, int(config.get(CONF_SCAN_INTERVAL, 60)))
-        except Exception:
-            pass
+        # Se usa el valor fijo de const.py
+        seconds = UPDATE_INTERVAL_SECONDS
 
         super().__init__(
             hass,
@@ -111,20 +103,14 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=DOMAIN,
             update_interval=timedelta(seconds=seconds),
         )
-    # --- FIN DE LA MODIFICACIÓN ---
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API endpoint."""
         
-        # --- INICIO DE LA MODIFICACIÓN (FIX PARA EL ERROR 431) ---
-        # Creamos el diccionario de cabeceras. Solo incluira el token.
         headers = {"X-Auth-Token": self.api_token}
         _LOGGER.debug("Fetching API data from %s", ENDPOINT_URL)
         
         try:
-            # Pasamos 'headers=headers' explicitamente.
-            # La sesion compartida '_session' NO debe tener
-            # cabeceras personalizadas por defecto.
             async with self._session.get(ENDPOINT_URL, headers=headers) as resp:
                 if resp.status == 403:
                     raise UpdateFailed("API Token inválido (403)")
@@ -134,11 +120,11 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     raise UpdateFailed(f"HTTP {resp.status}")
 
                 data = await resp.json(content_type=None)
-            # --- FIN DE LA MODIFICACIÓN ---
 
             if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                 raise UpdateFailed(f"Formato de respuesta inesperado: {data}")
 
+            # Ejecuta las acciones SGReady
             await self._execute_sgready_actions(data)
 
             if self.plant_id and self.ems_token:
