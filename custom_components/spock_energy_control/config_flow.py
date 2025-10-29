@@ -17,7 +17,7 @@ from homeassistant.helpers.selector import (
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
-    CONF_SCAN_INTERVAL,
+    # CONF_SCAN_INTERVAL, <--- ELIMINADO
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
     CONF_PLANT_ID,
@@ -47,8 +47,7 @@ class SpockConfigFlow(ConfigFlow, domain=DOMAIN):
         schema = vol.Schema({
             vol.Required(CONF_API_TOKEN): str,
             
-            vol.Optional(CONF_SCAN_INTERVAL, default=60):
-                vol.All(vol.Coerce(int), vol.Range(min=10)),
+            # vol.Optional(CONF_SCAN_INTERVAL, default=60): ... <--- ELIMINADO
             
             vol.Optional(CONF_GREEN_DEVICES, default=[]):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
@@ -90,14 +89,11 @@ class OptionsFlowHandler(OptionsFlow):
 
         config = {**self.config_entry.data, **self.config_entry.options}
 
-        # --- INICIO DE LA MODIFICACIÓN ---
-        # Ahora el schema de opciones tambien incluye el API_TOKEN
         options_schema = vol.Schema({
             vol.Required(CONF_API_TOKEN, default=config.get(CONF_API_TOKEN, "")):
                 str,
 
-            vol.Optional(CONF_SCAN_INTERVAL, default=config.get(CONF_SCAN_INTERVAL, 60)):
-                vol.All(vol.Coerce(int), vol.Range(min=10)),
+            # vol.Optional(CONF_SCAN_INTERVAL, ... <--- ELIMINADO
             
             vol.Optional(CONF_GREEN_DEVICES, default=config.get(CONF_GREEN_DEVICES, [])):
                 EntitySelector(EntitySelectorConfig(domain=["switch", "climate"], multiple=True)),
@@ -111,7 +107,6 @@ class OptionsFlowHandler(OptionsFlow):
             vol.Optional(CONF_EMS_TOKEN, description={"suggested_value": config.get(CONF_EMS_TOKEN, "")}): 
                 str,
         })
-        # --- FIN DE LA MODIFICACIÓN ---
 
         return self.async_show_form(
             step_id="init",
