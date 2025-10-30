@@ -11,7 +11,6 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# Imports centralizados desde const.py
 from .const import (
     DOMAIN,
     PLATFORMS,
@@ -26,10 +25,8 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Spock Energy Control."""
@@ -49,14 +46,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh() 
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
 
-    # Lee el intervalo (60s) directamente del coordinador
     interval = coordinator.update_interval
 
     async def _tick(_now):
         try:
             _LOGGER.debug("Spock Energy Control tick → async_request_refresh()")
             await coordinator.async_request_refresh()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc: 
             _LOGGER.exception("Tick error: %s", exc)
 
     unsub = async_track_time_interval(hass, _tick, interval)
@@ -94,7 +90,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         
         self._session = async_get_clientsession(hass)
 
-        # Se usa el valor fijo de const.py
         seconds = UPDATE_INTERVAL_SECONDS
 
         super().__init__(
