@@ -1,4 +1,4 @@
-# Spock Energy Control V1.0.1
+# Spock Energy Control
 
 **Control inteligente de dispositivos que permite pausarlos automáticamente según una señal remota de precios o consumo.**
 **Spock EMS para sistemas de almacenamiento (Marstek, SMA, ...)**
