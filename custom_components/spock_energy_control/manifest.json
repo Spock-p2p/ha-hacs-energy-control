@@ -4,7 +4,7 @@
   "documentation": "https://github.com/Spock-p2p/ha-hacs-energy-control",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/Spock-p2p/ha-hacs-energy-control/issues",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "config_flow": true,
   "codeowners": ["@Spock-p2p"],
   "requirements": [],
