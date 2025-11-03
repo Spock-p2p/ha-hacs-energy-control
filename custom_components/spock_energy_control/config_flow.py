@@ -22,10 +22,10 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
-    CONF_SCAN_INTERVAL,
+    # CONF_SCAN_INTERVAL, <-- ELIMINADO
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
-    DEFAULT_SCAN_INTERVAL_S,
+    DEFAULT_SCAN_INTERVAL_S, # <-- Lo mantenemos para __init__.py
     HARDCODED_API_URL,
 )
 
@@ -54,7 +54,7 @@ async def validate_auth(
         return {"base": "unknown"}
 
 
-class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
+class SpockEnergyControlConfigFlow(ConfigFlow, domain(DOMAIN):
     """Maneja el flujo de configuración para Spock Energy Control."""
 
     VERSION = 1
@@ -82,9 +82,7 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
         STEP_USER_DATA_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_API_TOKEN): str,
-                vol.Optional(
-                    CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL_S
-                ): int,
+                # --- CAMBIO: Eliminada la línea de CONF_SCAN_INTERVAL ---
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=[],
@@ -155,15 +153,7 @@ class OptionsFlowHandler(OptionsFlow):
                         CONF_API_TOKEN, self.config_entry.data[CONF_API_TOKEN]
                     ),
                 ): str,
-                vol.Optional(
-                    CONF_SCAN_INTERVAL,
-                    default=self.config_entry.options.get(
-                        CONF_SCAN_INTERVAL,
-                        self.config_entry.data.get(
-                            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_S
-                        ),
-                    ),
-                ): int,
+                 # --- CAMBIO: Eliminada la línea de CONF_SCAN_INTERVAL ---
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=self.config_entry.options.get(
@@ -178,7 +168,7 @@ class OptionsFlowHandler(OptionsFlow):
                 ),
                 vol.Optional(
                     CONF_YELLOW_DEVICES,
-                    default=self.config_entry.options.get(
+                    default=self.caonfig_entry.options.get(
                         CONF_YELLOW_DEVICES, self.config_entry.data.get(CONF_YELLOW_DEVICES, [])
                     ),
                 ): EntitySelector(
