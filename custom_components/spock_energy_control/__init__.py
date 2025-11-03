@@ -1,3 +1,4 @@
+"""Spock Energy Control (SGReady)"""
 from __future__ import annotations
 
 import asyncio
@@ -7,78 +8,74 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.event import async_track_time_interval
+# from homeassistant.helpers.event import async_track_time_interval # <-- CAMBIO: Eliminado
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-# Se han eliminado las importaciones de CONF_PLANT_ID y CONF_EMS_TOKEN
 from .const import (
     DOMAIN,
-    HARDCODED_API_URL,
     CONF_API_TOKEN,
-    CONF_SCAN_INTERVAL,
+    # CONF_SCAN_INTERVAL, # <-- CAMBIO: Eliminado
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
+    DEFAULT_SCAN_INTERVAL_S, # <-- CAMBIO: Lo usaremos para el valor hardcoded
+    PLATFORMS,
+    HARDCODED_API_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# Plataformas que este componente cargará (sensores)
-PLATFORMS: list[str] = ["sensor"]
-
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle entry reload."""
+    """Recarga la entrada de configuración."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Spock Energy Control from a config entry."""
+    """Configura Spock Energy Control."""
+    # Combina datos de 'data' (inicial) y 'options' (reconfiguración)
     cfg = {**entry.data, **entry.options}
+    
     coordinator = SpockEnergyCoordinator(hass, cfg)
 
-    # Estructura por entry_id (guardamos también el unsub del ticker)
+    # Estructura por entry_id (guardamos solo el coordinator)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
-        "unsub": None,
+        # "unsub": None, # <-- CAMBIO: Eliminado
     }
 
     # Reactivar al cambiar opciones
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # Primer fetch y programación del ciclo
+    # Primer fetch (esto está bien)
+    # El coordinator se encargará de los siguientes automáticamente
     await asyncio.sleep(2)
     await coordinator.async_config_entry_first_refresh()
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
 
-    interval = coordinator.update_interval or timedelta(seconds=60)
-
-    async def _tick(_now):
-        try:
-            _LOGGER.debug("Spock Energy Control tick → async_request_refresh()")
-            await coordinator.async_request_refresh()
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.exception("Tick error: %s", exc)
-
-    unsub = async_track_time_interval(hass, _tick, interval)
-    hass.data[DOMAIN][entry.entry_id]["unsub"] = unsub
-    _LOGGER.info("Spock Energy Control: ciclo programado cada %s.", interval)
-
-    # Carga las plataformas (sensor.py)
+    # ---- CAMBIO: Eliminado todo el bloque 'async_track_time_interval' ----
+    # El DataUpdateCoordinator ya tiene su propio temporizador interno
+    # basado en el 'update_interval' que le pasamos en su __init__.
+    # El 'tick' manual era redundante y causaba el problema.
+    
+    _LOGGER.info(
+         "Spock Energy Control: ciclo automático iniciado cada %s.", 
+         coordinator.update_interval
+    )
+    
+    # Cargar plataformas (ej. sensor.py)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    # 1. Descarga las plataformas (sensor.py)
+    """Descarga la entrada de configuración."""
+    # 1. Descargar plataformas (sensor.py, etc.)
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
-    # 2. Cancela el ticker
-    entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    if entry_data and entry_data.get("unsub"):
-        entry_data["unsub"]()  # cancelar ticker
+
+    # 2. Limpiar datos (ya no hay 'unsub' que cancelar)
+    hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     
     return unload_ok
 
@@ -87,21 +84,17 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator que consulta el endpoint y ejecuta acciones SGReady."""
 
     def __init__(self, hass: HomeAssistant, config: dict) -> None:
-        """Initialize coordinator."""
         self.config = config
         self.api_token: str = config[CONF_API_TOKEN]
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         self._session = async_get_clientsession(hass)
-        
-        # No hay lógica de CONF_PLANT_ID o CONF_EMS_TOKEN aquí.
 
-        # Intervalo desde opciones (mínimo 10s)
-        seconds = 60
-        try:
-            seconds = max(10, int(config.get(CONF_SCAN_INTERVAL, 60)))
-        except Exception:
-            pass
+        # --- CAMBIO: Intervalo hardcoded ---
+        # Ya no leemos CONF_SCAN_INTERVAL de la configuración
+        seconds = DEFAULT_SCAN_INTERVAL_S
+        _LOGGER.debug("Usando intervalo hardcoded de %s segundos", seconds)
+        # --- FIN DEL CAMBIO ---
 
         super().__init__(
             hass,
@@ -111,7 +104,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from API endpoint."""
         _LOGGER.debug("Fetching API data from %s", HARDCODED_API_URL)
         try:
             headers = {"X-Auth-Token": self.api_token}
@@ -138,9 +130,8 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fetcher error: {err}") from err
 
     async def _execute_sgready_actions(self, status: dict) -> None:
-        """Execute SGReady actions based on API status."""
         groups = {"green": self.green_devices, "yellow": self.yellow_devices}
-
+        
         for group, api_state in status.items():
             all_targets = groups.get(group) or []
             if not all_targets:
@@ -157,7 +148,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             elif api_state == "stop":
                 service_to_call = "turn_off"
                 desired_state = "off"
-
+            
             if not service_to_call or not desired_state:
                 _LOGGER.warning("Estado desconocido para %s: %s", group, api_state)
                 continue
@@ -170,19 +161,16 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     if not current_state_obj:
                         _LOGGER.warning(
-                            "No se pudo encontrar el estado de la entidad '%s' (grupo %s). Se omitirá.",
+                            "No se pudo encontrar el estado de la entidad '%s' (grupo %s). Se omitirá.", 
                             entity_id,
-                            group,
+                            group
                         )
                         continue
-
+                    
                     current_state = current_state_obj.state
                     _LOGGER.debug(
-                        "Entidad %s: API quiere '%s' (estado %s), estado actual es '%s'",
-                        entity_id,
-                        api_state,
-                        desired_state,
-                        current_state,
+                        "Entidad %s: API quiere '%s' (estado %s), estado actual es '%s'", 
+                        entity_id, api_state, desired_state, current_state
                     )
 
                     # 3. Comparar estado actual con deseado
@@ -190,22 +178,21 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         entities_to_action.append(entity_id)
                     else:
                         _LOGGER.debug(
-                            "Entidad %s ya está en el estado deseado (%s). No se envía acción.",
-                            entity_id,
-                            desired_state,
+                            "Entidad %s ya está en el estado deseado (%s). No se envía acción.", 
+                            entity_id, desired_state
                         )
-
+                
                 except Exception as e:
                     _LOGGER.error("Error al procesar entidad %s: %s", entity_id, e)
 
             # 4. Ejecutar la llamada al servicio SOLO si hay entidades que cambiar
             if entities_to_action:
                 _LOGGER.info(
-                    "Acción %s (desde API=%s) para %s: %s",
-                    service_to_call,
-                    api_state,
-                    group,
-                    entities_to_action,
+                    "Acción %s (desde API=%s) para %s: %s", 
+                    service_to_call, 
+                    api_state, 
+                    group, 
+                    entities_to_action
                 )
                 await self.hass.services.async_call(
                     "homeassistant",
@@ -218,6 +205,5 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "Acción %s (desde API=%s) para grupo %s: No se requieren cambios de estado.",
                     service_to_call,
                     api_state,
-                    group,
+                    group
                 )
-
