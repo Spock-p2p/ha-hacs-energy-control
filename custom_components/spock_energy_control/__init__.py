@@ -15,10 +15,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
-    # CONF_SCAN_INTERVAL, # <-- CAMBIO: Eliminado
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
-    DEFAULT_SCAN_INTERVAL_S, # <-- CAMBIO: Lo usaremos para el valor hardcoded
     PLATFORMS,
     HARDCODED_API_URL,
 )
@@ -47,16 +45,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Reactivar al cambiar opciones
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # Primer fetch (esto está bien)
+    # Primer fetch
     # El coordinator se encargará de los siguientes automáticamente
     await asyncio.sleep(2)
     await coordinator.async_config_entry_first_refresh()
     _LOGGER.info("Spock Energy Control: primer fetch realizado.")
 
-    # ---- CAMBIO: Eliminado todo el bloque 'async_track_time_interval' ----
     # El DataUpdateCoordinator ya tiene su propio temporizador interno
     # basado en el 'update_interval' que le pasamos en su __init__.
-    # El 'tick' manual era redundante y causaba el problema.
     
     _LOGGER.info(
          "Spock Energy Control: ciclo automático iniciado cada %s.", 
@@ -90,11 +86,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         self._session = async_get_clientsession(hass)
 
-        # --- CAMBIO: Intervalo hardcoded ---
-        # Ya no leemos CONF_SCAN_INTERVAL de la configuración
-        seconds = DEFAULT_SCAN_INTERVAL_S
         _LOGGER.debug("Usando intervalo hardcoded de %s segundos", seconds)
-        # --- FIN DEL CAMBIO ---
 
         super().__init__(
             hass,
