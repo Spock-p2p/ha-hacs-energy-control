@@ -11,9 +11,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigFlow, ConfigEntry, OptionsFlow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
+    EntitySelector,  # <--- CAMBIO: Importar EntitySelector
+    EntitySelectorConfig,  # <--- CAMBIO: Importar EntitySelectorConfig
 )
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.const import (
@@ -93,21 +92,19 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=[],
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        entity_filter=ENTITY_FILTER, 
+                ): EntitySelector(  # <--- CAMBIO: Usar EntitySelector
+                    EntitySelectorConfig(  # <--- CAMBIO: Usar EntitySelectorConfig
+                        filter=ENTITY_FILTER,  # <--- CAMBIO: renombrado de 'entity_filter' a 'filter'
                         multiple=True,
-                        mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
                 vol.Optional(
                     CONF_YELLOW_DEVICES,
                     default=[],
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        entity_filter=ENTITY_FILTER, 
+                ): EntitySelector(  # <--- CAMBIO: Usar EntitySelector
+                    EntitySelectorConfig(  # <--- CAMBIO: Usar EntitySelectorConfig
+                        filter=ENTITY_FILTER,  # <--- CAMBIO: renombrado de 'entity_filter' a 'filter'
                         multiple=True,
-                        mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
             }
@@ -174,11 +171,10 @@ class OptionsFlowHandler(OptionsFlow):
                     default=self.config_entry.options.get(
                         CONF_GREEN_DEVICES, self.config_entry.data.get(CONF_GREEN_DEVICES, [])
                     ),
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        entity_filter=ENTITY_FILTER, 
+                ): EntitySelector(  # <--- CAMBIO: Usar EntitySelector
+                    EntitySelectorConfig(  # <--- CAMBIO: Usar EntitySelectorConfig
+                        filter=ENTITY_FILTER,  # <--- CAMBIO: renombrado de 'entity_filter' a 'filter'
                         multiple=True,
-                        mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
                 vol.Optional(
@@ -186,11 +182,10 @@ class OptionsFlowHandler(OptionsFlow):
                     default=self.config_entry.options.get(
                         CONF_YELLOW_DEVICES, self.config_entry.data.get(CONF_YELLOW_DEVICES, [])
                     ),
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        entity_filter=ENTITY_FILTER, 
+                ): EntitySelector(  # <--- CAMBIO: Usar EntitySelector
+                    EntitySelectorConfig(  # <--- CAMBIO: Usar EntitySelectorConfig
+                        filter=ENTITY_FILTER,  # <--- CAMBIO: renombrado de 'entity_filter' a 'filter'
                         multiple=True,
-                        mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
             }
