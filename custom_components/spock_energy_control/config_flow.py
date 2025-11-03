@@ -17,13 +17,9 @@ from homeassistant.helpers.selector import (
 )
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.const import (
-    CONF_DEVICES,
-    CONF_ENTITIES,
     CONF_DOMAINS,
-    CONF_ENTITY_ID,
 )
 
-# Se eliminan CONF_PLANT_ID y CONF_EMS_TOKEN de las importaciones
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
@@ -71,34 +67,53 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Maneja el paso de configuración inicial (usuario)."""
+        """Maneja el paso de configuración inicial (todos los campos)."""
         errors: dict[str, str] = {}
         if user_input is not None:
             
-            # Validar el API Token
             errors = await validate_auth(self.hass, user_input[CONF_API_TOKEN])
             
             if not errors:
-                # El título será fijo ya que no tenemos Plant ID
                 await self.async_set_unique_id(user_input[CONF_API_TOKEN])
                 self._abort_if_unique_id_configured()
 
+                # Guardamos todos los datos en la creación
                 return self.async_create_entry(
                     title="Spock Energy Control",
                     data=user_input,
                 )
 
-        # Se eliminan CONF_PLANT_ID y CONF_EMS_TOKEN del esquema
+        # --- ESQUEMA VUELVE A INCLUIR DISPOSITIVOS ---
         STEP_USER_DATA_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_API_TOKEN): str,
                 vol.Optional(
                     CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL_S
                 ): int,
+                vol.Optional(
+                    CONF_GREEN_DEVICES,
+                    default=[],
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        entity_filter=ENTITY_FILTER, 
+                        multiple=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    CONF_YELLOW_DEVICES,
+                    default=[],
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        entity_filter=ENTITY_FILTER, 
+                        multiple=True,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }
         )
+        # --- FIN DEL CAMBIO ---
 
-        # Muestra el formulario
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
         )
@@ -113,7 +128,7 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(OptionsFlow):
-    """Maneja el flujo de opciones (reconfiguración)."""
+    """Maneja el flujo de opciones (reconfiguración y selección de dispositivos)."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Inicializa el flujo de opciones."""
@@ -127,18 +142,16 @@ class OptionsFlowHandler(OptionsFlow):
         
         if user_input is not None:
             # Validar el token si ha cambiado
-            new_token = user_input[CONF_API_TOKEN]
             old_token = self.config_entry.options.get(CONF_API_TOKEN, self.config_entry.data[CONF_API_TOKEN])
             
-            if new_token != old_token:
-                errors = await validate_auth(self.hass, new_token)
+            if user_input[CONF_API_TOKEN] != old_token:
+                errors = await validate_auth(self.hass, user_input[CONF_API_TOKEN])
             
             if not errors:
-                # Actualiza la configuración de la entrada
                 return self.async_create_entry(title="", data=user_input)
 
-        # Rellena el formulario con los valores actuales
-        # Se eliminan CONF_PLANT_ID y CONF_EMS_TOKEN del esquema de opciones
+        # Rellena el formulario con los valores actuales (priorizando options sobre data)
+        # Este esquema es ahora idéntico al de 'async_step_user'
         options_schema = vol.Schema(
             {
                 vol.Required(
@@ -159,7 +172,7 @@ class OptionsFlowHandler(OptionsFlow):
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=self.config_entry.options.get(
-                        CONF_GREEN_DEVICES, []
+                        CONF_GREEN_DEVICES, self.config_entry.data.get(CONF_GREEN_DEVICES, [])
                     ),
                 ): SelectSelector(
                     SelectSelectorConfig(
@@ -171,7 +184,7 @@ class OptionsFlowHandler(OptionsFlow):
                 vol.Optional(
                     CONF_YELLOW_DEVICES,
                     default=self.config_entry.options.get(
-                        CONF_YELLOW_DEVICES, []
+                        CONF_YELLOW_DEVICES, self.config_entry.data.get(CONF_YELLOW_DEVICES, [])
                     ),
                 ): SelectSelector(
                     SelectSelectorConfig(
@@ -186,3 +199,4 @@ class OptionsFlowHandler(OptionsFlow):
         return self.async_show_form(
             step_id="init", data_schema=options_schema, errors=errors
         )
+
