@@ -15,9 +15,9 @@ from homeassistant.helpers.selector import (
     EntitySelectorConfig,
 )
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.const import (
-    CONF_DOMAINS,
-)
+# from homeassistant.const import (  <--- ELIMINADO
+#     CONF_DOMAINS,
+# )
 
 from .const import (
     DOMAIN,
@@ -31,11 +31,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Filtro para seleccionar entidades que se puedan encender/apagar
-ENTITY_FILTER = {
-    CONF_DOMAINS: ["switch", "light", "input_boolean", "automation"]
-}
-
+# --- ELIMINADO EL DICCIONARIO ENTITY_FILTER ---
 
 async def validate_auth(
     hass: HomeAssistant, api_token: str
@@ -95,7 +91,8 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                        **ENTITY_FILTER  # <--- CAMBIO: Desempaquetar el filtro
+                        # <--- CAMBIO: Hardcodeado el filtro de dominio
+                        domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
                 vol.Optional(
@@ -104,7 +101,8 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                        **ENTITY_FILTER  # <--- CAMBIO: Desempaquetar el filtro
+                         # <--- CAMBIO: Hardcodeado el filtro de dominio
+                        domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
             }
@@ -174,7 +172,8 @@ class OptionsFlowHandler(OptionsFlow):
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                        **ENTITY_FILTER  # <--- CAMBIO: Desempaquetar el filtro
+                         # <--- CAMBIO: Hardcodeado el filtro de dominio
+                        domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
                 vol.Optional(
@@ -185,7 +184,8 @@ class OptionsFlowHandler(OptionsFlow):
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                        **ENTITY_FILTER  # <--- CAMBIO: Desempaquetar el filtro
+                         # <--- CAMBIO: Hardcodeado el filtro de dominio
+                        domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
             }
