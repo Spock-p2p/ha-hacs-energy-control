@@ -39,7 +39,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Estructura por entry_id (guardamos solo el coordinator)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
-        # "unsub": None, # <-- CAMBIO: Eliminado
     }
 
     # Reactivar al cambiar opciones
@@ -55,7 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # basado en el 'update_interval' que le pasamos en su __init__.
     
     _LOGGER.info(
-         "Spock Energy Control: ciclo automático iniciado cada %s.", 
+         "Spock Energy Control: Iteración iniciada cada %s.", 
          coordinator.update_interval
     )
     
@@ -86,7 +85,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         self._session = async_get_clientsession(hass)
 
-        _LOGGER.debug("Usando intervalo hardcoded de %s segundos", seconds)
+        _LOGGER.debug("Usando intervalo de %s segundos", seconds)
 
         super().__init__(
             hass,
