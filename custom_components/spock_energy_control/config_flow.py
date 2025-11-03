@@ -1,6 +1,7 @@
 """Config flow for Spock Energy Control."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -15,23 +16,17 @@ from homeassistant.helpers.selector import (
     EntitySelectorConfig,
 )
 from homeassistant.data_entry_flow import FlowResult
-# from homeassistant.const import (  <--- ELIMINADO
-#     CONF_DOMAINS,
-# )
 
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
-    # CONF_SCAN_INTERVAL, <-- ELIMINADO
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
-    DEFAULT_SCAN_INTERVAL_S, # <-- Lo mantenemos para __init__.py
     HARDCODED_API_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# --- ELIMINADO EL DICCIONARIO ENTITY_FILTER ---
 
 async def validate_auth(
     hass: HomeAssistant, api_token: str
@@ -54,7 +49,7 @@ async def validate_auth(
         return {"base": "unknown"}
 
 
-class SpockEnergyControlConfigFlow(ConfigFlow, domain(DOMAIN):
+class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN): # <--- ¡CORREGIDO!
     """Maneja el flujo de configuración para Spock Energy Control."""
 
     VERSION = 1
@@ -78,18 +73,15 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain(DOMAIN):
                     data=user_input,
                 )
 
-        # --- ESQUEMA VUELVE A INCLUIR DISPOSITIVOS ---
         STEP_USER_DATA_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_API_TOKEN): str,
-                # --- CAMBIO: Eliminada la línea de CONF_SCAN_INTERVAL ---
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=[],
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                        # <--- CAMBIO: Hardcodeado el filtro de dominio
                         domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
@@ -99,13 +91,11 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain(DOMAIN):
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                         # <--- CAMBIO: Hardcodeado el filtro de dominio
                         domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
             }
         )
-        # --- FIN DEL CAMBIO ---
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
@@ -143,8 +133,6 @@ class OptionsFlowHandler(OptionsFlow):
             if not errors:
                 return self.async_create_entry(title="", data=user_input)
 
-        # Rellena el formulario con los valores actuales (priorizando options sobre data)
-        # Este esquema es ahora idéntico al de 'async_step_user'
         options_schema = vol.Schema(
             {
                 vol.Required(
@@ -153,7 +141,6 @@ class OptionsFlowHandler(OptionsFlow):
                         CONF_API_TOKEN, self.config_entry.data[CONF_API_TOKEN]
                     ),
                 ): str,
-                 # --- CAMBIO: Eliminada la línea de CONF_SCAN_INTERVAL ---
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=self.config_entry.options.get(
@@ -162,19 +149,17 @@ class OptionsFlowHandler(OptionsFlow):
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                         # <--- CAMBIO: Hardcodeado el filtro de dominio
                         domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
                 vol.Optional(
                     CONF_YELLOW_DEVICES,
-                    default=self.caonfig_entry.options.get(
+                    default=self.config_entry.options.get(
                         CONF_YELLOW_DEVICES, self.config_entry.data.get(CONF_YELLOW_DEVICES, [])
                     ),
                 ): EntitySelector(
                     EntitySelectorConfig(
                         multiple=True,
-                         # <--- CAMBIO: Hardcodeado el filtro de dominio
                         domain=["switch", "light", "input_boolean", "automation"]
                     )
                 ),
@@ -184,4 +169,3 @@ class OptionsFlowHandler(OptionsFlow):
         return self.async_show_form(
             step_id="init", data_schema=options_schema, errors=errors
         )
-
