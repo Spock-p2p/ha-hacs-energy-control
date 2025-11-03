@@ -1,31 +1,17 @@
 """Constants for the Spock Energy Control integration."""
+from __future__ import annotations
+from datetime import timedelta
 
 DOMAIN = "spock_energy_control"
 
-CONF_ENTITIES = "entities"
-
-# Polling
-UPDATE_INTERVAL_SECONDS = 60
-
-# Endpoint fijo (no configurable)
-ENDPOINT_URL = "https://flex.spock.es/api/status"
-
-# Datos en hass.data
-DATA_ACTIVE = "active"
-DATA_ENTITIES = "entities"
-DATA_UNSUB = "unsub"
-
-# Switch virtual
-SWITCH_UNIQUE_ID = "spock_energy_control_active"
-SWITCH_NAME = "Spock Energy Control Active"
-
-# --- Constantes de Configuracion ---
+# Configuration keys
 CONF_API_TOKEN = "api_token"
-# CONF_SCAN_INTERVAL = "scan_interval"  <--- ELIMINADO
+CONF_SCAN_INTERVAL = "scan_interval"
 CONF_GREEN_DEVICES = "green_devices"
 CONF_YELLOW_DEVICES = "yellow_devices"
-CONF_PLANT_ID = "plant_id"
-CONF_EMS_TOKEN = "ems_token"
 
-# const para el sensor
-PLATFORMS: list[str] = ["sensor"]
+# Defaults
+DEFAULT_SCAN_INTERVAL_S = 60
+
+# API
+HARDCODED_API_URL = "https://flex.spock.es/api/status"
