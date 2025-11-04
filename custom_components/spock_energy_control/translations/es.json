@@ -14,7 +14,7 @@
         },
         "error": {
             "cannot_connect": "No se pudo conectar a la API de Spock. Comprueba la red.",
-            "invalid_auth": "API Token inválido.",
+            "invalid_auth": "API Token o ID de Planta inválido.",
             "unknown": "Ocurrió un error desconocido."
         },
         "abort": {
@@ -36,7 +36,7 @@
         },
         "error": {
             "cannot_connect": "No se pudo conectar a la API de Spock. Comprueba la red.",
-            "invalid_auth": "API Token inválido."
+            "invalid_auth": "API Token o ID de Planta inválido."
         }
     },
     "entity": {
