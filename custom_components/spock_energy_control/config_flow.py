@@ -14,35 +14,42 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
-    # TextSelector, # <-- CAMBIO ELIMINADO
-    # TextSelectorConfig, # <-- CAMBIO ELIMINADO
-    # TextSelectorType, # <-- CAMBIO ELIMINADO
 )
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
-    CONF_PLANT_ID, # <-- CAMBIO AÑADIDO
+    CONF_PLANT_ID, 
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
     HARDCODED_API_URL,
-    # CONF_TELEMETRY_URL, # <-- CAMBIO ELIMINADO
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def validate_auth(
-    hass: HomeAssistant, api_token: str
+    hass: HomeAssistant, api_token: str, plant_id: str
 ) -> dict[str, str]:
-    """Valida el API token haciendo una llamada al endpoint GET."""
+    """Valida la autenticación haciendo un POST con el plant_id."""
     session = async_get_clientsession(hass)
     headers = {"X-Auth-Token": api_token}
+    # --- CAMBIO: Preparar payload para el POST ---
+    json_payload = {"plant_id": plant_id}
+    # --- FIN DEL CAMBIO ---
     
     try:
-        async with session.get(HARDCODED_API_URL, headers=headers, timeout=10) as resp:
+        # --- CAMBIO: de .get a .post ---
+        async with session.post(
+            HARDCODED_API_URL, 
+            headers=headers, 
+            json=json_payload, 
+            timeout=10
+        ) as resp:
+        # --- FIN DEL CAMBIO ---
             if resp.status == 403:
+                # 403 sigue siendo "Token inválido" o "Plant ID incorrecto"
                 return {"base": "invalid_auth"}
             resp.raise_for_status() 
             return {} 
@@ -66,11 +73,15 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             
-            # Solo validamos el token. El plant_id no se puede validar.
-            errors = await validate_auth(self.hass, user_input[CONF_API_TOKEN])
+            # --- CAMBIO: Validar también con plant_id ---
+            errors = await validate_auth(
+                self.hass, 
+                user_input[CONF_API_TOKEN], 
+                user_input[CONF_PLANT_ID]
+            )
+            # --- FIN DEL CAMBIO ---
             
             if not errors:
-                # Usamos una combinación de token y plant_id para el ID único
                 unique_id = f"{user_input[CONF_API_TOKEN]}_{user_input[CONF_PLANT_ID]}"
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
@@ -83,9 +94,7 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
         STEP_USER_DATA_SCHEMA = vol.Schema(
             {
                 vol.Required(CONF_API_TOKEN): str,
-                # --- CAMBIO: Añadido Plant ID, Eliminado Telemetry URL ---
                 vol.Required(CONF_PLANT_ID): str,
-                # --- FIN DEL CAMBIO ---
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=[],
@@ -137,12 +146,21 @@ class OptionsFlowHandler(OptionsFlow):
         
         if user_input is not None:
             old_token = current_config.get(CONF_API_TOKEN)
+            old_plant_id = current_config.get(CONF_PLANT_ID)
             
-            if user_input[CONF_API_TOKEN] != old_token:
-                errors = await validate_auth(self.hass, user_input[CONF_API_TOKEN])
+            # Validar si el token o el plant_id han cambiado
+            if (user_input[CONF_API_TOKEN] != old_token or 
+                user_input[CONF_PLANT_ID] != old_plant_id):
+                
+                # --- CAMBIO: Validar también con plant_id ---
+                errors = await validate_auth(
+                    self.hass, 
+                    user_input[CONF_API_TOKEN], 
+                    user_input[CONF_PLANT_ID]
+                )
+                # --- FIN DEL CAMBIO ---
             
             if not errors:
-                # Actualizamos el ID único si ha cambiado
                 new_unique_id = f"{user_input[CONF_API_TOKEN]}_{user_input[CONF_PLANT_ID]}"
                 if self.config_entry.unique_id != new_unique_id:
                     self.hass.config_entries.async_update_entry(
@@ -157,12 +175,10 @@ class OptionsFlowHandler(OptionsFlow):
                     CONF_API_TOKEN,
                     default=current_config.get(CONF_API_TOKEN),
                 ): str,
-                # --- CAMBIO: Añadido Plant ID, Eliminado Telemetry URL ---
                 vol.Required(
                     CONF_PLANT_ID,
                     default=current_config.get(CONF_PLANT_ID),
                 ): str,
-                # --- FIN DEL CAMBIO ---
                 vol.Optional(
                     CONF_GREEN_DEVICES,
                     default=current_config.get(CONF_GREEN_DEVICES, []),
