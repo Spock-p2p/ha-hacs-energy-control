@@ -77,7 +77,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.config = config
         self.config_entry = entry 
         self.api_token: str = config[CONF_API_TOKEN]
-        self.plant_id: str = config[CONF_PLANT_ID] # <-- CAMBIO: Guardar plant_id
+        self.plant_id: str = config[CONF_PLANT_ID]
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         
@@ -97,23 +97,33 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=seconds),
         )
 
+    # --- CAMBIO: Lógica de detección de sensores mejorada ---
     def _find_power_sensors(self) -> set[str]:
-        """Encuentra automáticamente los sensores de potencia."""
+        """
+        Encuentra automáticamente los sensores de potencia asociados
+        a los dispositivos listados en GREEN_DEVICES y YELLOW_DEVICES.
+        
+        Busca por 'device_class: power' O por entity_id que termine en '_power'.
+        """
         if self._power_sensor_entity_ids is not None:
             return self._power_sensor_entity_ids 
 
         all_controlled_entities = self.green_devices + self.yellow_devices
         if not all_controlled_entities:
+            _LOGGER.debug("No hay dispositivos Green/Yellow configurados, no se buscan sensores.")
             self._power_sensor_entity_ids = set()
             return set()
         
         found_sensor_ids = set()
         processed_device_ids = set()
+        
+        _LOGGER.debug(f"Buscando sensores de potencia para entidades: {all_controlled_entities}")
 
         for entity_id in all_controlled_entities:
             entry = self.entity_registry.async_get(entity_id)
             
             if not entry or not entry.device_id:
+                _LOGGER.debug(f"Entidad '{entity_id}' no tiene device_id, omitiendo.")
                 continue
                 
             device_id = entry.device_id
@@ -121,31 +131,47 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if device_id in processed_device_ids:
                 continue
             processed_device_ids.add(device_id)
+            
+            _LOGGER.debug(f"Inspeccionando dispositivo '{device_id}' (de la entidad '{entity_id}')")
 
             entities_on_device = er.async_entries_for_device(
                 self.entity_registry, device_id
             )
             
             for device_entity in entities_on_device:
-                if (
-                    device_entity.domain == "sensor" and 
-                    device_entity.device_class == "power"
-                ):
+                # Condición 1: Es un sensor
+                is_sensor = device_entity.domain == "sensor"
+                
+                # Condición 2: La clase es 'power'
+                is_power_class = device_entity.device_class == "power"
+                
+                # Condición 3: El ID termina en '_power'
+                id_ends_with_power = device_entity.entity_id.endswith("_power")
+
+                if is_sensor and (is_power_class or id_ends_with_power):
                     _LOGGER.info(
-                        "Sensor de potencia encontrado para el dispositivo '%s': %s",
+                        "¡Sensor de potencia encontrado! (Dispositivo: '%s', Entidad: %s, Clase: %s)",
                         device_id,
-                        device_entity.entity_id
+                        device_entity.entity_id,
+                        device_entity.device_class
                     )
                     found_sensor_ids.add(device_entity.entity_id)
 
         self._power_sensor_entity_ids = found_sensor_ids
+        if not found_sensor_ids:
+            _LOGGER.debug(f"No se encontraron sensores de potencia para los dispositivos: {processed_device_ids}")
+            
         return self._power_sensor_entity_ids
+    # --- FIN DEL CAMBIO ---
 
 
     async def _async_send_telemetry(self) -> None:
-        """Envía telemetría para cada sensor de potencia detectado."""
+        """
+        Para cada sensor de potencia detectado, envía su telemetría al endpoint.
+        """
         power_sensor_ids = self._find_power_sensors()
         if not power_sensor_ids:
+            # Este log ahora es 'debug' porque es normal si no hay sensores
             _LOGGER.debug("No se encontraron sensores de potencia asociados. Omitiendo telemetría.")
             return
 
@@ -201,16 +227,13 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Obtiene los datos de la API (sensores) y ejecuta acciones."""
         _LOGGER.debug("Iniciando ciclo de actualización...")
         
-        # 1. Enviar telemetría
         try:
             await self._async_send_telemetry()
         except Exception as e:
             _LOGGER.error("Error en _async_send_telemetry (no fatal): %s", e)
 
-        # 2. Obtener estado SGReady
         _LOGGER.debug("Fetching API data (SGReady status) from %s", HARDCODED_API_URL)
         try:
-            # --- CAMBIO: de .get a .post ---
             headers = {"X-Auth-Token": self.api_token}
             json_payload = {"plant_id": self.plant_id}
             
@@ -219,7 +242,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 headers=headers, 
                 json=json_payload
             ) as resp:
-            # --- FIN DEL CAMBIO ---
                 if resp.status == 403:
                     raise UpdateFailed("API Token o Plant ID inválido (403)")
                 if resp.status != 200:
