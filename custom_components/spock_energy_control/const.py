@@ -12,7 +12,7 @@ CONF_YELLOW_DEVICES = "yellow_devices"
 DEFAULT_SCAN_INTERVAL_S = 60
 
 # --- Plataformas ---
-PLATFORMS: list[str] = ["sensor"]
+PLATFORMS: list[str] = ["sensor", "switch"]
 
 # --- API ---
 HARDCODED_API_URL = "https://flex.spock.es/api/status"
