@@ -3,9 +3,10 @@
         "step": {
             "user": {
                 "title": "Spock Energy Control Setup",
-                "description": "Enter your API token. Device selection is available after setup in 'Options'.",
+                "description": "Enter your API Token and Plant ID. Telemetry will be sent automatically if power sensors are detected.",
                 "data": {
                     "api_token": "API Token (Required)",
+                    "plant_id": "Plant ID (Required)",
                     "green_devices": "'Green' SGReady Devices",
                     "yellow_devices": "'Yellow' SGReady Devices"
                 }
@@ -13,20 +14,21 @@
         },
         "error": {
             "cannot_connect": "Unable to connect to Spock API. Check network.",
-            "invalid_auth": "Invalid API Token.",
+            "invalid_auth": "Invalid API Token or Plant ID.",
             "unknown": "An unknown error occurred."
         },
         "abort": {
-            "already_configured": "This API Token is already configured."
+            "already_configured": "This API Token and Plant ID combination is already configured."
         }
     },
     "options": {
         "step": {
             "init": {
                 "title": "Spock Energy Control Options",
-                "description": "Update your API Token or change the target devices for SGReady signals.",
+                "description": "Update your API configuration or devices.",
                 "data": {
                     "api_token": "API Token (Required)",
+                    "plant_id": "Plant ID (Required)",
                     "green_devices": "'Green' SGReady Devices",
                     "yellow_devices": "'Yellow' SGReady Devices"
                 }
@@ -34,7 +36,7 @@
         },
         "error": {
             "cannot_connect": "Unable to connect to Spock API. Check network.",
-            "invalid_auth": "Invalid API Token."
+            "invalid_auth": "Invalid API Token or Plant ID."
         }
     },
     "entity": {
