@@ -1,38 +1,55 @@
 {
-  "config": {
-    "step": {
-      "user": {
-        "title": "Configuración de Spock Energy Control",
-        "description": "Introduce toda la información de configuración.",
-        "data": {
-          "api_token": "API Token (Obligatorio)",
-          "green_devices": "Dispositivos 'Green' SGReady",
-          "yellow_devices": "Dispositivos 'Yellow' SGReady",
-          "plant_id": "Identificador de planta (ej: 123445)",
-          "ems_token": "Token de acceso EMS"
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configuración de Spock Energy Control",
+                "description": "Introduce tu API token. La selección de dispositivos está disponible tras la configuración en 'Opciones'.",
+                "data": {
+                    "api_token": "API Token (Obligatorio)",
+                    "green_devices": "Dispositivos 'Green' SGReady",
+                    "yellow_devices": "Dispositivos 'Yellow' SGReady"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "No se pudo conectar a la API de Spock. Comprueba la red.",
+            "invalid_auth": "API Token inválido.",
+            "unknown": "Ocurrió un error desconocido."
+        },
+        "abort": {
+            "already_configured": "Este API Token ya está configurado."
         }
-      }
     },
-    "error": {
-      "invalid_auth": "El API Token no es válido.",
-      "cannot_connect": "No se puede conectar con la API de Spock."
-    },
-    "abort": {
-      "already_configured": "Este API Token ya está configurado."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Opciones de Spock Energy Control",
-        "data": {
-          "api_token": "API Token (Obligatorio)",
-          "green_devices": "Dispositivos 'Green' SGReady",
-          "yellow_devices": "Dispositivos 'Yellow' SGReady",
-          "plant_id": "Identificador de planta (ej: 123445)",
-          "ems_token": "Token de acceso EMS"
+    "options": {
+        "step": {
+            "init": {
+                "title": "Opciones de Spock Energy Control",
+                "description": "Actualiza tu API Token o cambia los dispositivos para las señales SGReady.",
+                "data": {
+                    "api_token": "API Token (Obligatorio)",
+                    "green_devices": "Dispositivos 'Green' SGReady",
+                    "yellow_devices": "Dispositivos 'Yellow' SGReady"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "No se pudo conectar a la API de Spock. Comprueba la red.",
+            "invalid_auth": "API Token inválido."
         }
-      }
+    },
+    "entity": {
+        "sensor": {
+            "green_status": {
+                "name": "Estado Green"
+            },
+            "yellow_status": {
+                "name": "Estado Yellow"
+            }
+        },
+        "switch": {
+            "sgready_actions": {
+                "name": "Habilitar Acciones SGReady"
+            }
+        }
     }
-  }
 }
