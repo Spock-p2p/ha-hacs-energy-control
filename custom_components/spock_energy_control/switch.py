@@ -58,10 +58,12 @@ class SpockActionsSwitch(SwitchEntity):
         """Habilita la ejecución de acciones."""
         _LOGGER.debug("Habilitando acciones SGReady")
         self.hass.data[DOMAIN][self._entry_id]["run_actions"] = True
-        self.async_write_state_changed() # Actualiza el estado en HA
+        
+        self.async_write_ha_state() # Corregido de async_write_state_changed()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Deshabilita la ejecución de acciones."""
         _LOGGER.debug("Deshabilitando acciones SGReady")
         self.hass.data[DOMAIN][self._entry_id]["run_actions"] = False
-        self.async_write_state_changed() # Actualiza el estado en HA
+        
+        self.async_write_ha_state() # Corregido de async_write_state_changed()
