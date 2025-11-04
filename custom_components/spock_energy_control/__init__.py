@@ -10,22 +10,19 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-# --- CAMBIO: Importar registros de entidad y dispositivo ---
 from homeassistant.helpers import entity_registry as er 
 from homeassistant.helpers import device_registry as dr
-# --- FIN DEL CAMBIO ---
 
 from .const import (
     DOMAIN,
     CONF_API_TOKEN,
-    CONF_PLANT_ID, # <-- CAMBIO
+    CONF_PLANT_ID,
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
-    # CONF_TELEMETRY_URL, # <-- CAMBIO ELIMINADO
     DEFAULT_SCAN_INTERVAL_S, 
     PLATFORMS,
     HARDCODED_API_URL,
-    HARDCODED_API_URL_TELEMETRIA, # <-- CAMBIO
+    HARDCODED_API_URL_TELEMETRIA,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,16 +77,13 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.config = config
         self.config_entry = entry 
         self.api_token: str = config[CONF_API_TOKEN]
+        self.plant_id: str = config[CONF_PLANT_ID] # <-- CAMBIO: Guardar plant_id
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         
-        # --- CAMBIO: Guardar config de telemetría y registros ---
-        self.plant_id: str = config[CONF_PLANT_ID]
-        # self.telemetry_url: str | None = config.get(CONF_TELEMETRY_URL) # Eliminado
         self.entity_registry: er.EntityRegistry = er.async_get(hass)
-        self.device_registry: dr.DeviceRegistry = dr.async_get(hass) # <-- AÑADIDO
+        self.device_registry: dr.DeviceRegistry = dr.async_get(hass) 
         self._power_sensor_entity_ids: set[str] | None = None
-        # --- FIN DEL CAMBIO ---
         
         self._session = async_get_clientsession(hass)
 
@@ -104,11 +98,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     def _find_power_sensors(self) -> set[str]:
-        """
-        Encuentra automáticamente los sensores de potencia ('device_class: power')
-        asociados a los dispositivos listados en GREEN_DEVICES y YELLOW_DEVICES.
-        (Esta función es correcta, no necesita cambios)
-        """
+        """Encuentra automáticamente los sensores de potencia."""
         if self._power_sensor_entity_ids is not None:
             return self._power_sensor_entity_ids 
 
@@ -152,13 +142,8 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._power_sensor_entity_ids
 
 
-    # --- CAMBIO: Lógica actualizada de _async_send_telemetry ---
     async def _async_send_telemetry(self) -> None:
-        """
-        Para cada sensor de potencia detectado, envía su telemetría al endpoint.
-        """
-        
-        # Encontrar los sensores de potencia
+        """Envía telemetría para cada sensor de potencia detectado."""
         power_sensor_ids = self._find_power_sensors()
         if not power_sensor_ids:
             _LOGGER.debug("No se encontraron sensores de potencia asociados. Omitiendo telemetría.")
@@ -166,10 +151,8 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         headers = {"X-Auth-Token": self.api_token}
 
-        # Iterar y enviar un POST por cada sensor
         for sensor_id in power_sensor_ids:
             try:
-                # 1. Obtener Valor de Potencia
                 state: State | None = self.hass.states.get(sensor_id)
                 if not state or state.state in ("unknown", "unavailable"):
                     _LOGGER.warning("No se pudo leer el sensor de potencia '%s'. Omitiendo.", sensor_id)
@@ -177,29 +160,25 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 
                 power_value = float(state.state)
 
-                # 2. Obtener Descripción del Dispositivo
                 desc_device = "Dispositivo Desconocido"
                 sensor_entry = self.entity_registry.async_get(sensor_id)
                 
                 if sensor_entry and sensor_entry.device_id:
                     device_entry = self.device_registry.async_get(sensor_entry.device_id)
                     if device_entry:
-                        # Usar el nombre dado por el usuario o el nombre por defecto
                         desc_device = device_entry.name_by_user or device_entry.name
 
-                # 3. Construir Payload
                 telemetry_data = {
                    "plant_id": self.plant_id,
                    "desc_device": desc_device,
                    "sensor_id": sensor_id,
-                   "power": str(power_value), # Enviamos como string
+                   "power": str(power_value),
                 }
 
-                # 4. Enviar POST para este sensor
                 _LOGGER.debug("Enviando telemetría para %s: %s", sensor_id, telemetry_data)
                 
                 async with self._session.post(
-                    HARDCODED_API_URL_TELEMETRIA, # Usamos la nueva constante
+                    HARDCODED_API_URL_TELEMETRIA,
                     headers=headers, 
                     json=telemetry_data,
                     timeout=10
@@ -216,28 +195,33 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             
             except Exception as err:
                 _LOGGER.error("Error al procesar/enviar telemetría para %s: %s", sensor_id, err)
-                # El bucle continúa con el siguiente sensor
-    # --- FIN DEL CAMBIO ---
 
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Obtiene los datos de la API (sensores) y ejecuta acciones."""
         _LOGGER.debug("Iniciando ciclo de actualización...")
         
-        # 1. Enviar telemetría (si está configurada)
-        # (Esto ahora itera y envía todos los sensores)
+        # 1. Enviar telemetría
         try:
             await self._async_send_telemetry()
         except Exception as e:
             _LOGGER.error("Error en _async_send_telemetry (no fatal): %s", e)
 
-        # 2. Obtener estado SGReady (lógica original)
-        _LOGGER.debug("Fetching API data from %s", HARDCODED_API_URL)
+        # 2. Obtener estado SGReady
+        _LOGGER.debug("Fetching API data (SGReady status) from %s", HARDCODED_API_URL)
         try:
+            # --- CAMBIO: de .get a .post ---
             headers = {"X-Auth-Token": self.api_token}
-            async with self.hass.helpers.aiohttp_client.async_get_clientsession().get(HARDCODED_API_URL, headers=headers) as resp:
+            json_payload = {"plant_id": self.plant_id}
+            
+            async with self._session.post(
+                HARDCODED_API_URL, 
+                headers=headers, 
+                json=json_payload
+            ) as resp:
+            # --- FIN DEL CAMBIO ---
                 if resp.status == 403:
-                    raise UpdateFailed("API Token inválido (403)")
+                    raise UpdateFailed("API Token o Plant ID inválido (403)")
                 if resp.status != 200:
                     txt = await resp.text()
                     _LOGGER.error("API error %s: %s", resp.status, txt)
@@ -257,8 +241,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fetcher error: {err}") from err
 
     async def _execute_sgready_actions(self, status: dict) -> None:
-        # (Esta función no necesita cambios)
-        
+        """Ejecuta las acciones on/off en los dispositivos."""
         entry_id = self.config_entry.entry_id
         run_actions = self.hass.data[DOMAIN].get(entry_id, {}).get("run_actions", True)
         
