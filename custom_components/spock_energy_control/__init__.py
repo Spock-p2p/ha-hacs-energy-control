@@ -16,7 +16,7 @@ from .const import (
     CONF_API_TOKEN,
     CONF_GREEN_DEVICES,
     CONF_YELLOW_DEVICES,
-    DEFAULT_SCAN_INTERVAL_S, # <-- Importante
+    DEFAULT_SCAN_INTERVAL_S, 
     PLATFORMS,
     HARDCODED_API_URL,
 )
@@ -33,10 +33,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configura Spock Energy Control."""
     cfg = {**entry.data, **entry.options}
     
-    coordinator = SpockEnergyCoordinator(hass, cfg) # <--- Linea 37
+    coordinator = SpockEnergyCoordinator(hass, cfg, entry) # <-- CAMBIO: Pasamos 'entry'
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
+        "run_actions": True,  # <-- CAMBIO: Estado inicial del interruptor
     }
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -50,6 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
          coordinator.update_interval
     )
     
+    # Esto cargará 'sensor.py' y el nuevo 'switch.py'
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
@@ -67,30 +69,28 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator que consulta el endpoint y ejecuta acciones SGReady."""
 
-    def __init__(self, hass: HomeAssistant, config: dict) -> None:
+    # CAMBIO: Añadimos 'entry' al __init__
+    def __init__(self, hass: HomeAssistant, config: dict, entry: ConfigEntry) -> None: 
         """Inicializa el coordinador."""
         self.config = config
+        self.config_entry = entry # Guardamos la entry
         self.api_token: str = config[CONF_API_TOKEN]
         self.green_devices: list[str] = config.get(CONF_GREEN_DEVICES, [])
         self.yellow_devices: list[str] = config.get(CONF_YELLOW_DEVICES, [])
         self._session = async_get_clientsession(hass)
 
-        # --- CORRECCIÓN ---
-        # Definimos 'seconds' antes de usarlo.
         seconds = DEFAULT_SCAN_INTERVAL_S
-        
-        # Esta es la línea 88 que daba el error
         _LOGGER.debug("Usando intervalo hardcoded de %s segundos", seconds)
-        # --- FIN DE LA CORRECCIÓN ---
 
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=seconds), # 'seconds' se usa aquí
+            update_interval=timedelta(seconds=seconds),
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
+        """Obtiene los datos de la API (sensores) y ejecuta acciones."""
         _LOGGER.debug("Fetching API data from %s", HARDCODED_API_URL)
         try:
             headers = {"X-Auth-Token": self.api_token}
@@ -107,6 +107,7 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not isinstance(data, dict) or "green" not in data or "yellow" not in data:
                 raise UpdateFailed(f"Formato de respuesta inesperado: {data}")
 
+            # Los sensores se actualizan. Ahora, ejecutar acciones (si está habilitado)
             await self._execute_sgready_actions(data)
             return data
 
@@ -116,6 +117,17 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fetcher error: {err}") from err
 
     async def _execute_sgready_actions(self, status: dict) -> None:
+        """Ejecuta las acciones on/off en los dispositivos."""
+        
+        # --- CAMBIO: Comprobar si las acciones están habilitadas ---
+        entry_id = self.config_entry.entry_id
+        run_actions = self.hass.data[DOMAIN].get(entry_id, {}).get("run_actions", True)
+        
+        if not run_actions:
+            _LOGGER.debug("Acciones deshabilitadas por el interruptor. Omitiendo ejecución.")
+            return
+        # --- FIN DEL CAMBIO ---
+
         groups = {"green": self.green_devices, "yellow": self.yellow_devices}
         
         for group, api_state in status.items():
@@ -152,18 +164,8 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         continue
                     
                     current_state = current_state_obj.state
-                    _LOGGER.debug(
-                        "Entidad %s: API quiere '%s' (estado %s), estado actual es '%s'", 
-                        entity_id, api_state, desired_state, current_state
-                    )
-
                     if current_state != desired_state:
                         entities_to_action.append(entity_id)
-                    else:
-                        _LOGGER.debug(
-                            "Entidad %s ya está en el estado deseado (%s). No se envía acción.", 
-                            entity_id, desired_state
-                        )
                 
                 except Exception as e:
                     _LOGGER.error("Error al procesar entidad %s: %s", entity_id, e)
