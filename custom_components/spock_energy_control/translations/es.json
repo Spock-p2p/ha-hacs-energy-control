@@ -3,9 +3,10 @@
         "step": {
             "user": {
                 "title": "Configuración de Spock Energy Control",
-                "description": "Introduce tu API token. La selección de dispositivos está disponible tras la configuración en 'Opciones'.",
+                "description": "Introduce tu API token y el ID de Planta. La telemetría se enviará automáticamente si se detectan sensores de potencia.",
                 "data": {
                     "api_token": "API Token (Obligatorio)",
+                    "plant_id": "ID de Planta (Obligatorio)",
                     "green_devices": "Dispositivos 'Green' SGReady",
                     "yellow_devices": "Dispositivos 'Yellow' SGReady"
                 }
@@ -17,16 +18,17 @@
             "unknown": "Ocurrió un error desconocido."
         },
         "abort": {
-            "already_configured": "Este API Token ya está configurado."
+            "already_configured": "Esta combinación de API Token e ID de Planta ya está configurada."
         }
     },
     "options": {
         "step": {
             "init": {
                 "title": "Opciones de Spock Energy Control",
-                "description": "Actualiza tu API Token o cambia los dispositivos para las señales SGReady.",
+                "description": "Actualiza tu configuración de API o dispositivos.",
                 "data": {
                     "api_token": "API Token (Obligatorio)",
+                    "plant_id": "ID de Planta (Obligatorio)",
                     "green_devices": "Dispositivos 'Green' SGReady",
                     "yellow_devices": "Dispositivos 'Yellow' SGReady"
                 }
