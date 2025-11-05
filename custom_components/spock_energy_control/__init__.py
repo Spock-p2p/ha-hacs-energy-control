@@ -97,7 +97,6 @@ class SpockEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=seconds),
         )
 
-    # --- CAMBIO: Lógica de detección de sensores mejorada ---
     def _find_power_sensors(self) -> set[str]:
         """
         Encuentra automáticamente los sensores de potencia asociados
