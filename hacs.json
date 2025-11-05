@@ -2,7 +2,9 @@
   "name": "Spock SG Ready",
   "render_readme": true,
   "country": "ES",
-  "domains": ["spock_energy_control"],
+  "domains": [
+    "binary_sensor"
+  ],
   "homeassistant": "2024.6.0",
   "iot_class": "cloud_polling"
 }
