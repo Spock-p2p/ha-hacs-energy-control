@@ -35,19 +35,15 @@ async def validate_auth(
     """Valida la autenticación haciendo un POST con el plant_id."""
     session = async_get_clientsession(hass)
     headers = {"X-Auth-Token": api_token}
-    # --- CAMBIO: Preparar payload para el POST ---
     json_payload = {"plant_id": plant_id}
-    # --- FIN DEL CAMBIO ---
     
     try:
-        # --- CAMBIO: de .get a .post ---
         async with session.post(
             HARDCODED_API_URL, 
             headers=headers, 
             json=json_payload, 
             timeout=10
         ) as resp:
-        # --- FIN DEL CAMBIO ---
             if resp.status == 403:
                 # 403 sigue siendo "Token inválido" o "Plant ID incorrecto"
                 return {"base": "invalid_auth"}
@@ -73,13 +69,11 @@ class SpockEnergyControlConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             
-            # --- CAMBIO: Validar también con plant_id ---
             errors = await validate_auth(
                 self.hass, 
                 user_input[CONF_API_TOKEN], 
                 user_input[CONF_PLANT_ID]
             )
-            # --- FIN DEL CAMBIO ---
             
             if not errors:
                 unique_id = f"{user_input[CONF_API_TOKEN]}_{user_input[CONF_PLANT_ID]}"
@@ -152,13 +146,11 @@ class OptionsFlowHandler(OptionsFlow):
             if (user_input[CONF_API_TOKEN] != old_token or 
                 user_input[CONF_PLANT_ID] != old_plant_id):
                 
-                # --- CAMBIO: Validar también con plant_id ---
                 errors = await validate_auth(
                     self.hass, 
                     user_input[CONF_API_TOKEN], 
                     user_input[CONF_PLANT_ID]
                 )
-                # --- FIN DEL CAMBIO ---
             
             if not errors:
                 new_unique_id = f"{user_input[CONF_API_TOKEN]}_{user_input[CONF_PLANT_ID]}"
