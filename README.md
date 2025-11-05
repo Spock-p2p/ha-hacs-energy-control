@@ -40,15 +40,7 @@ A diferencia de las integraciones de telemetría (que leen potencia, SOC, etc.),
 
 ## Configuración
 
-Una vez instalada la integración, debes añadir la siguiente configuración a tu archivo `configuration.yaml`:
-
-```yaml
-# Configuración del sensor de control Spock
-spock_energy_control:
-  plant_id: "TU_PLANT_ID"
-  auth_token: "TU_X_AUTH_TOKEN_SECRETO"
-  scan_interval: 30 # Opcional: intervalo en segundos (default: 30)
-```
+No es necesario ningun paso adicional, a parte de los parámetros entrados en el momento de configuración del componente.
   
 ## Parámetros de Configuración
 
