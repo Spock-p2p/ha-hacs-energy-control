@@ -113,7 +113,7 @@ action:
             id: 'yellow_off'
         sequence:
           - service: switch.turn_on
-```
             target:
               entity_id: switch.enchufe_termo
 mode: single
+```
