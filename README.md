@@ -4,6 +4,8 @@
 
 Esta es una integración personalizada para [Home Assistant (HA)](https://www.home-assistant.io/) diseñada para recibir señales de control activas desde la plataforma en la nube de Spock.
 
+** Para utilizar esta integración es imprescindible crear un cuenta en Spock: https://spock.es/register **
+
 A diferencia de las integraciones de telemetría (que leen potencia, SOC, etc.), esta integración se enfoca en recibir **acciones** o **comandos** (ej. "iniciar carga", "detener descarga") generados por el EMS de Spock. Su propósito principal es permitirte crear automatizaciones complejas en Home Assistant basadas en estas señales.
 
 ## Características
